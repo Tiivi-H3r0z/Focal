@@ -115,15 +115,15 @@ export default function ClientGallery({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <header className="border-b border-stone-200 sticky top-0 z-10 bg-white/95 backdrop-blur">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-brand-700">Focal</h1>
-              <p className="text-sm text-gray-600">
-                {dossier.client_name}'s Gallery
+              <h1 className="text-xl font-serif text-stone-900">Les Augustins Photographie</h1>
+              <p className="text-sm text-stone-500 mt-1">
+                {dossier.client_name}
               </p>
             </div>
             <SelectionCounter
@@ -140,10 +140,10 @@ export default function ClientGallery({
           <div className="mt-4">
             <input
               type="text"
-              placeholder="Search photos by filename..."
+              placeholder="Search by filename..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300 bg-stone-50 text-stone-900 placeholder-stone-400"
             />
           </div>
         </div>
@@ -151,11 +151,11 @@ export default function ClientGallery({
 
       {/* Status Messages */}
       {isLocked && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+          <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
+            <div className="flex items-start">
               <svg
-                className="h-5 w-5 text-purple-400"
+                className="h-5 w-5 text-stone-500 mt-0.5"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -166,12 +166,11 @@ export default function ClientGallery({
                 />
               </svg>
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-purple-800">
+                <h3 className="text-sm font-medium text-stone-900">
                   Selection Locked
                 </h3>
-                <p className="mt-1 text-sm text-purple-700">
-                  Your selection has been received and is being processed. You
-                  can view your selections but cannot make changes.
+                <p className="mt-1 text-sm text-stone-600">
+                  Your selection has been received and is being processed. You can view your selections but cannot make changes.
                 </p>
               </div>
             </div>
@@ -180,11 +179,11 @@ export default function ClientGallery({
       )}
 
       {dossier.status === 'submitted' && !isLocked && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex">
+            <div className="flex items-start">
               <svg
-                className="h-5 w-5 text-green-400"
+                className="h-5 w-5 text-green-600 mt-0.5"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -195,12 +194,11 @@ export default function ClientGallery({
                 />
               </svg>
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-green-800">
+                <h3 className="text-sm font-medium text-green-900">
                   Selection Submitted
                 </h3>
                 <p className="mt-1 text-sm text-green-700">
-                  Your selection has been submitted! You can still modify your
-                  choices until the photographer locks the selection.
+                  Your selection has been submitted! You can still modify your choices until the photographer locks the selection.
                 </p>
               </div>
             </div>
@@ -209,7 +207,7 @@ export default function ClientGallery({
       )}
 
       {/* Photo Grid */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <PhotoGrid
           photos={filteredPhotos}
           selections={selections}
@@ -220,10 +218,17 @@ export default function ClientGallery({
 
         {filteredPhotos.length === 0 && searchTerm && (
           <div className="text-center py-12">
-            <p className="text-gray-500">No photos found matching "{searchTerm}"</p>
+            <p className="text-stone-500">No photos found matching "{searchTerm}"</p>
           </div>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-stone-200 mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center">
+          <p className="text-xs text-stone-400">Powered by Focal</p>
+        </div>
+      </footer>
     </div>
   )
 }
