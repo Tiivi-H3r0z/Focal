@@ -15,6 +15,22 @@ interface UploadProgress {
   currentFile: string
 }
 
+// Sanitize filenames to remove accents and special characters
+function sanitizeFilename(filename: string): string {
+  const lastDotIndex = filename.lastIndexOf('.')
+  const name = lastDotIndex !== -1 ? filename.substring(0, lastDotIndex) : filename
+  const ext = lastDotIndex !== -1 ? filename.substring(lastDotIndex) : ''
+
+  const sanitized = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+
+  return sanitized + ext
+}
+
 export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
   const router = useRouter()
   const supabase = createClient()
@@ -23,13 +39,14 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
   const [error, setError] = useState<string | null>(null)
 
   const uploadFile = async (file: File, index: number, total: number) => {
-    const filename = file.name
-    const storagePath = `${dossierId}/${filename}`
+    const originalFilename = file.name
+    const sanitizedFilename = sanitizeFilename(originalFilename)
+    const storagePath = `${dossierId}/${sanitizedFilename}`
 
     setProgress({
       total,
       uploaded: index,
-      currentFile: filename,
+      currentFile: originalFilename,
     })
 
     // Upload to storage
@@ -41,24 +58,24 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
       })
 
     if (uploadError) {
-      console.error(`Error uploading ${filename}:`, uploadError)
-      throw new Error(`Failed to upload ${filename}: ${uploadError.message}`)
+      console.error(`Error uploading ${originalFilename}:`, uploadError)
+      throw new Error(`Failed to upload ${originalFilename}: ${uploadError.message}`)
     }
 
     // Insert to database
     const { error: dbError } = await supabase.from('photos').insert({
       dossier_id: dossierId,
-      original_filename: filename,
+      original_filename: originalFilename,
       storage_path: storagePath,
       file_size: file.size,
       display_order: index,
     })
 
     if (dbError) {
-      console.error(`Error saving ${filename} to database:`, dbError)
+      console.error(`Error saving ${originalFilename} to database:`, dbError)
       // Try to delete from storage if DB insert fails
       await supabase.storage.from('photos').remove([storagePath])
-      throw new Error(`Failed to save ${filename} to database`)
+      throw new Error(`Failed to save ${originalFilename} to database`)
     }
   }
 
