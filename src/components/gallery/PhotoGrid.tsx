@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import type { Photo, Selection } from '@/lib/types/database.types'
 import PhotoCard from './PhotoCard'
+import PhotoLightbox from './PhotoLightbox'
 
 interface PhotoGridProps {
   photos: Photo[]
@@ -18,18 +20,35 @@ export default function PhotoGrid({
   onUpdateComment,
   isLocked,
 }: PhotoGridProps) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-      {photos.map((photo) => (
-        <PhotoCard
-          key={photo.id}
-          photo={photo}
-          selection={selections.get(photo.id)}
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        {photos.map((photo, index) => (
+          <PhotoCard
+            key={photo.id}
+            photo={photo}
+            selection={selections.get(photo.id)}
+            onToggleSelection={onToggleSelection}
+            onUpdateComment={onUpdateComment}
+            onPhotoClick={() => setLightboxIndex(index)}
+            isLocked={isLocked}
+          />
+        ))}
+      </div>
+
+      {lightboxIndex !== null && (
+        <PhotoLightbox
+          photos={photos}
+          currentIndex={lightboxIndex}
+          selections={selections}
+          onClose={() => setLightboxIndex(null)}
           onToggleSelection={onToggleSelection}
           onUpdateComment={onUpdateComment}
           isLocked={isLocked}
         />
-      ))}
-    </div>
+      )}
+    </>
   )
 }
