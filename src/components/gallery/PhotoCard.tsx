@@ -2,6 +2,7 @@
 
 import type { Photo, Selection } from '@/lib/types/database.types'
 import { createClient } from '@/lib/supabase/client'
+import { Icons } from './Icons'
 
 interface PhotoCardProps {
   photo: Photo
@@ -10,6 +11,7 @@ interface PhotoCardProps {
   onUpdateComment: (photo: Photo, comment: string) => void
   onPhotoClick: () => void
   isLocked: boolean
+  aspectRatio?: 'portrait' | 'landscape' | 'square'
 }
 
 export default function PhotoCard({
@@ -19,9 +21,11 @@ export default function PhotoCard({
   onUpdateComment,
   onPhotoClick,
   isLocked,
+  aspectRatio = 'square',
 }: PhotoCardProps) {
   const supabase = createClient()
   const isSelected = !!selection
+  const hasComment = !!selection?.comment
 
   const getPhotoUrl = () => {
     const { data } = supabase.storage
@@ -30,74 +34,90 @@ export default function PhotoCard({
     return data.publicUrl
   }
 
-  const handleCheckboxChange = () => {
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation()
     if (isLocked) return
     onToggleSelection(photo)
   }
 
   return (
     <div
-      className={`relative group rounded overflow-hidden transition-all ${
-        isSelected
-          ? 'ring-2 ring-stone-900 shadow-xl'
-          : 'hover:shadow-lg'
-      }`}
+      className={`group relative overflow-hidden bg-stone-200 transition-all duration-500 cursor-pointer
+        ${aspectRatio === 'portrait' ? 'sm:row-span-2' : ''}
+        ${aspectRatio === 'landscape' ? 'sm:col-span-2' : ''}
+        ${isSelected ? 'ring-4 ring-stone-900 ring-inset' : 'hover:shadow-2xl'}
+        aspect-[4/3] sm:aspect-auto
+      `}
+      onClick={handleToggle}
     >
-      {/* Photo */}
-      <div
-        className="aspect-square bg-stone-100 cursor-pointer"
-        onClick={onPhotoClick}
-      >
-        <img
-          src={getPhotoUrl()}
-          alt={photo.original_filename}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
-      </div>
+      <img
+        src={getPhotoUrl()}
+        alt={photo.original_filename}
+        className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${isSelected ? 'opacity-80' : ''}`}
+        loading="lazy"
+      />
 
-      {/* Overlay with Controls */}
-      <div
-        className={`absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity ${
-          isLocked ? 'cursor-not-allowed' : ''
-        }`}
-      >
-        {/* Checkbox */}
-        {!isLocked && (
-          <div className="absolute top-3 left-3">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={handleCheckboxChange}
-              onClick={(e) => e.stopPropagation()}
-              className="h-5 w-5 rounded border-2 border-white text-stone-900 focus:ring-stone-900 cursor-pointer shadow-sm"
-            />
+      {/* Overlay controls - desktop */}
+      <div className="absolute inset-0 bg-black/20 opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
+        <div className="flex justify-between items-start">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors
+              ${isSelected ? 'bg-stone-900 border-stone-900' : 'bg-white/20 border-white'}
+            `}
+          >
+            {isSelected && <Icons.Check />}
           </div>
-        )}
-
-        {/* Selected Badge */}
-        {isSelected && (
-          <div className="absolute top-3 right-3 bg-stone-900 text-white px-3 py-1 rounded text-xs font-medium tracking-wide">
-            SELECTED
-          </div>
-        )}
-
-        {/* Comment Indicator */}
-        {selection?.comment && (
-          <div className="absolute bottom-3 left-3 bg-stone-900 text-white px-2 py-1 rounded text-xs flex items-center space-x-1">
-            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-            </svg>
-          </div>
-        )}
-
-        {/* Click to view hint */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-          <div className="bg-white text-stone-900 px-4 py-2 rounded shadow-lg text-sm">
-            View full size
+          <div className="flex gap-2">
+            {hasComment && (
+              <div className="p-2 bg-stone-900/50 rounded-full text-white backdrop-blur-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              </div>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onPhotoClick()
+              }}
+              className="p-3 sm:p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-sm transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </button>
           </div>
         </div>
+        <div className="text-white text-xs font-medium tracking-wider drop-shadow-md">
+          {photo.original_filename}
+        </div>
       </div>
+
+      {/* Persistent visible overlay on mobile */}
+      <div className="sm:hidden absolute top-2 right-2 flex gap-2 items-center">
+         {hasComment && (
+            <div className="p-2 bg-stone-900/40 rounded-full text-white backdrop-blur-md">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+          )}
+         <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onPhotoClick()
+            }}
+            className="p-3 bg-black/40 rounded-full text-white backdrop-blur-md"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </button>
+      </div>
+
+      {/* Persistent selected indicator */}
+      {isSelected && (
+        <div className="absolute top-2 left-2 w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center text-white ring-2 ring-white shadow-lg animate-zoom-in">
+          <Icons.Heart />
+        </div>
+      )}
+
+      {/* Locked indicator */}
+      {isLocked && (
+        <div className="absolute inset-0 bg-black/10 cursor-not-allowed" />
+      )}
     </div>
   )
 }
