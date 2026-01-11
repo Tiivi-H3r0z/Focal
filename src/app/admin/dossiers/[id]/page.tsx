@@ -5,6 +5,7 @@ import { getStatusColor, getStatusLabel, formatDate } from '@/lib/utils'
 import DossierActions from '@/components/admin/DossierActions'
 import PhotoGallery from '@/components/admin/PhotoGallery'
 import SelectionViewer from '@/components/admin/SelectionViewer'
+import CopyButton from '@/components/admin/CopyButton'
 
 export default async function DossierDetailPage({
   params,
@@ -220,12 +221,7 @@ export default async function DossierDetailPage({
           <div className="flex items-center space-x-2">
             <code className="flex-1 bg-white px-3 py-2 rounded text-sm text-blue-800 border border-blue-300">
               {galleryUrl}
-            </code>
-            <button
-              onClick={() => navigator.clipboard.writeText(galleryUrl)}
-              className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-            >
-              Copy
+            <CopyButton text={galleryUrl} />
             </button>
           </div>
         </div>
