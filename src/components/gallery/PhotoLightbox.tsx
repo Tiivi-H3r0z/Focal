@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Photo, Selection } from '@/lib/types/database.types'
 import { createClient } from '@/lib/supabase/client'
+import { Icons } from './Icons'
 
 interface PhotoLightboxProps {
   photos: Photo[]
@@ -27,56 +28,99 @@ export default function PhotoLightbox({
   const [index, setIndex] = useState(currentIndex)
   const [showCommentInput, setShowCommentInput] = useState(false)
   const [commentText, setCommentText] = useState('')
+  const [isHoveringImage, setIsHoveringImage] = useState(false)
+
+  // Touch handling refs
+  const touchStart = useRef<number | null>(null)
+  const touchEnd = useRef<number | null>(null)
+  const minSwipeDistance = 50
 
   const currentPhoto = photos[index]
   const currentSelection = selections.get(currentPhoto.id)
   const isSelected = !!currentSelection
+  const comment = currentSelection?.comment || ''
 
   useEffect(() => {
     setCommentText(currentSelection?.comment || '')
   }, [currentSelection])
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowLeft') handlePrevious()
-      if (e.key === 'ArrowRight') handleNext()
-      if (e.key === ' ') {
-        e.preventDefault()
-        handleToggleSelection()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [index, isSelected])
-
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (index < photos.length - 1) {
       setIndex(index + 1)
       setShowCommentInput(false)
+    } else {
+      setIndex(0) // Loop to start
     }
-  }
+  }, [index, photos.length])
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (index > 0) {
       setIndex(index - 1)
       setShowCommentInput(false)
+    } else {
+      setIndex(photos.length - 1) // Loop to end
     }
-  }
+  }, [index, photos.length])
 
-  const handleToggleSelection = () => {
+  const handleToggleSelection = useCallback(() => {
     if (isLocked) return
     onToggleSelection(currentPhoto)
+  }, [isLocked, onToggleSelection, currentPhoto])
+
+  // Touch handlers
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchEnd.current = null
+    touchStart.current = e.targetTouches[0].clientX
   }
 
-  const handleSaveComment = () => {
-    if (isSelected) {
-      onUpdateComment(currentPhoto, commentText)
-    } else {
-      onToggleSelection(currentPhoto, commentText)
+  const onTouchMove = (e: React.TouchEvent) => {
+    touchEnd.current = e.targetTouches[0].clientX
+  }
+
+  const onTouchEnd = () => {
+    if (!touchStart.current || !touchEnd.current) return
+    const distance = touchStart.current - touchEnd.current
+    const isLeftSwipe = distance > minSwipeDistance
+    const isRightSwipe = distance < -minSwipeDistance
+
+    if (isLeftSwipe) {
+      handleNext()
+    } else if (isRightSwipe) {
+      handlePrevious()
     }
-    setShowCommentInput(false)
+  }
+
+  // Keyboard handler
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (showCommentInput) return
+
+    switch (e.key) {
+      case 'ArrowRight':
+        handleNext()
+        break
+      case 'ArrowLeft':
+        handlePrevious()
+        break
+      case ' ':
+        e.preventDefault()
+        handleToggleSelection()
+        break
+      case 'Escape':
+        onClose()
+        break
+    }
+  }, [showCommentInput, handleNext, handlePrevious, handleToggleSelection, onClose])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  const handleUpdateComment = (newComment: string) => {
+    if (isSelected) {
+      onUpdateComment(currentPhoto, newComment)
+    }
+    setCommentText(newComment)
   }
 
   const getPhotoUrl = (photo: Photo) => {
@@ -87,157 +131,149 @@ export default function PhotoLightbox({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-95 z-50 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-black bg-opacity-50">
-        <div className="flex items-center space-x-4">
-          <h3 className="text-white text-lg font-medium">
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-stone-950 animate-fade-in touch-none"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* Top Bar */}
+      <div className="absolute top-0 w-full p-4 sm:p-6 flex justify-between items-center z-30 pointer-events-none">
+        <div className="hidden sm:block bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 pointer-events-auto">
+          <span className="font-mono text-[10px] tracking-[0.2em] text-white/50 uppercase">
             {currentPhoto.original_filename}
-          </h3>
-          {currentSelection?.comment && (
-            <span className="text-brand-400 text-sm flex items-center">
-              <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-              </svg>
-              Has comment
-            </span>
-          )}
-        </div>
-        <div className="flex items-center space-x-2">
-          <span className="text-gray-400 text-sm">
-            {index + 1} / {photos.length}
           </span>
-          <button
-            onClick={onClose}
-            className="text-white hover:text-gray-300 p-2"
-          >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="group flex items-center gap-3 bg-white/10 hover:bg-white text-white hover:text-stone-900 transition-all px-4 py-2 sm:px-5 rounded-full border border-white/10 backdrop-blur-md pointer-events-auto shadow-xl ml-auto"
+        >
+          <span className="text-[10px] sm:text-xs font-bold tracking-widest uppercase">Fermer</span>
+          <div className="w-px h-3 sm:h-4 bg-current opacity-30"></div>
+          <Icons.Close />
+        </button>
+      </div>
+
+      {/* Interactive Main Area */}
+      <div className="relative w-full h-full flex items-center justify-center overflow-hidden pt-12 pb-32">
+        {/* Large hover navigation areas - desktop */}
+        <button
+          onClick={handlePrevious}
+          className="hidden sm:flex absolute inset-y-0 left-0 w-1/4 z-20 group items-center justify-start pl-8"
+        >
+          <div className="w-16 h-16 flex items-center justify-center rounded-full bg-white/0 group-hover:bg-white/10 border border-transparent group-hover:border-white/20 text-white/0 group-hover:text-white transition-all duration-300">
+            <Icons.ChevronLeftLarge />
+          </div>
+        </button>
+
+        <button
+          onClick={handleNext}
+          className="hidden sm:flex absolute inset-y-0 right-0 w-1/4 z-20 group items-center justify-end pr-8"
+        >
+          <div className="w-16 h-16 flex items-center justify-center rounded-full bg-white/0 group-hover:bg-white/10 border border-transparent group-hover:border-white/20 text-white/0 group-hover:text-white transition-all duration-300">
+            <Icons.ChevronRightLarge />
+          </div>
+        </button>
+
+        {/* Main Image */}
+        <div
+          className="relative max-w-[95vw] sm:max-w-[85vw] max-h-[60vh] sm:max-h-[75vh] transition-transform duration-500 z-10"
+          onMouseEnter={() => setIsHoveringImage(true)}
+          onMouseLeave={() => setIsHoveringImage(false)}
+        >
+          <img
+            key={currentPhoto.id}
+            src={getPhotoUrl(currentPhoto)}
+            alt={currentPhoto.original_filename}
+            className={`w-full h-full object-contain shadow-[0_0_100px_rgba(0,0,0,0.8)] transition-all duration-500 pointer-events-none select-none ${isHoveringImage ? 'scale-[1.01]' : 'scale-100'}`}
+          />
         </div>
       </div>
 
-      {/* Main Image Area */}
-      <div className="flex-1 flex items-center justify-center relative">
-        {/* Previous Button */}
-        {index > 0 && (
+      {/* Interaction Bar */}
+      <div className="absolute bottom-6 sm:bottom-12 z-30 flex flex-col items-center gap-4 sm:gap-6 w-full px-4">
+        {/* Comment Drawer */}
+        <div className={`transition-all duration-300 w-full max-w-lg overflow-hidden ${showCommentInput || comment ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className="bg-stone-900/60 backdrop-blur-3xl border border-white/10 rounded-2xl p-3 mb-2">
+            <input
+              type="text"
+              placeholder="Ajouter une instruction ou un commentaire..."
+              value={commentText}
+              onChange={(e) => handleUpdateComment(e.target.value)}
+              onFocus={() => setShowCommentInput(true)}
+              onBlur={() => setShowCommentInput(false)}
+              disabled={isLocked || !isSelected}
+              className="w-full bg-transparent border-none text-white text-sm outline-none placeholder:text-white/30 disabled:cursor-not-allowed"
+            />
+          </div>
+        </div>
+
+        {/* Control Bar */}
+        <div className="flex items-center gap-2 sm:gap-4 bg-stone-900/60 backdrop-blur-3xl p-2 sm:p-3 rounded-full border border-white/10 shadow-2xl w-full max-w-md sm:max-w-none justify-between sm:justify-center">
+          {/* Previous Button */}
           <button
             onClick={handlePrevious}
-            className="absolute left-4 z-10 bg-black bg-opacity-50 hover:bg-opacity-75 text-white rounded-full p-3 transition-all"
+            className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full bg-white/5 text-white hover:bg-white/20 transition-all border border-white/5 active:scale-90"
           >
-            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            <Icons.ChevronLeft />
           </button>
-        )}
 
-        {/* Image */}
-        <img
-          src={getPhotoUrl(currentPhoto)}
-          alt={currentPhoto.original_filename}
-          className="max-w-full max-h-full object-contain"
-        />
-
-        {/* Next Button */}
-        {index < photos.length - 1 && (
-          <button
-            onClick={handleNext}
-            className="absolute right-4 z-10 bg-black bg-opacity-50 hover:bg-opacity-75 text-white rounded-full p-3 transition-all"
-          >
-            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        )}
-      </div>
-
-      {/* Bottom Controls */}
-      <div className="bg-black bg-opacity-50 p-4">
-        <div className="max-w-4xl mx-auto">
-          {!showCommentInput ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                {/* Selection Toggle */}
-                {!isLocked && (
-                  <button
-                    onClick={handleToggleSelection}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                      isSelected
-                        ? 'bg-brand-600 text-white hover:bg-brand-700'
-                        : 'bg-gray-700 text-white hover:bg-gray-600'
-                    }`}
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      {isSelected ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      )}
-                    </svg>
-                    <span>{isSelected ? 'Remove from Basket' : 'Add to Basket'}</span>
-                  </button>
-                )}
-
-                {/* Comment Button */}
-                {!isLocked && (
-                  <button
-                    onClick={() => setShowCommentInput(true)}
-                    className="flex items-center space-x-2 px-4 py-2 rounded-lg font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                    </svg>
-                    <span>{currentSelection?.comment ? 'Edit Comment' : 'Add Comment'}</span>
-                  </button>
-                )}
+          {/* Selection Toggle Button */}
+          {!isLocked && (
+            <button
+              onClick={handleToggleSelection}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 sm:gap-4 px-4 sm:px-12 h-12 sm:h-14 rounded-full font-bold text-sm sm:text-lg transition-all transform active:scale-95 shadow-xl border sm:min-w-[280px]
+                ${isSelected
+                  ? 'bg-rose-500 text-white border-rose-400 scale-105'
+                  : 'bg-stone-800 text-white/70 border-white/5'
+                }
+              `}
+            >
+              <div className={`transition-all duration-300 ${isSelected ? 'text-white' : 'opacity-50'}`}>
+                {isSelected ? <Icons.Heart /> : <div className="w-5 h-5 rounded-full border-2 border-current" />}
               </div>
+              <span className="tracking-widest uppercase whitespace-nowrap text-xs sm:text-sm">
+                {isSelected ? 'Photo choisie' : 'Choisir cette photo'}
+              </span>
+            </button>
+          )}
 
-              {/* Current Comment Display */}
-              {currentSelection?.comment && (
-                <div className="max-w-md">
-                  <p className="text-gray-300 text-sm italic">
-                    "{currentSelection.comment}"
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Add your comment (e.g., 'black & white please', 'crop tighter', etc.)"
-                rows={3}
-                autoFocus
-                className="w-full px-4 py-3 bg-gray-800 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-gray-400"
-              />
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setShowCommentInput(false)
-                    setCommentText(currentSelection?.comment || '')
-                  }}
-                  className="px-4 py-2 rounded-lg font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveComment}
-                  className="px-4 py-2 rounded-lg font-medium bg-brand-600 text-white hover:bg-brand-700 transition-colors"
-                >
-                  Save Comment
-                </button>
-              </div>
+          {/* Locked indicator */}
+          {isLocked && (
+            <div className="flex-1 sm:flex-none flex items-center justify-center gap-2 sm:gap-4 px-4 sm:px-12 h-12 sm:h-14 rounded-full font-bold text-sm sm:text-lg bg-stone-800 text-white/50 border border-white/5 sm:min-w-[280px]">
+              <Icons.Lock />
+              <span className="tracking-widest uppercase whitespace-nowrap text-xs sm:text-sm">
+                Selection verrouillée
+              </span>
             </div>
           )}
 
-          {/* Keyboard Shortcuts Hint */}
-          <div className="mt-3 text-center text-gray-500 text-xs">
-            <span className="mr-4">← → Navigate</span>
-            <span className="mr-4">Space: Toggle selection</span>
-            <span>Esc: Close</span>
-          </div>
+          {/* Comment Toggle Button */}
+          {!isLocked && isSelected && (
+            <button
+              onClick={() => setShowCommentInput(!showCommentInput)}
+              className={`w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full transition-all border active:scale-90 ${comment ? 'bg-white/20 text-white border-white/20' : 'bg-white/5 text-white/50 border-white/5 hover:text-white hover:bg-white/10'}`}
+              title="Ajouter un commentaire"
+            >
+              <Icons.Comment />
+            </button>
+          )}
+
+          {/* Next Button */}
+          <button
+            onClick={handleNext}
+            className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full bg-white/5 text-white hover:bg-white/20 transition-all border border-white/5 active:scale-90"
+          >
+            <Icons.ChevronRight />
+          </button>
+        </div>
+
+        {/* Keyboard Shortcuts Hint - desktop only */}
+        <div className="hidden sm:flex text-center text-white/30 text-xs gap-4">
+          <span>← → Naviguer</span>
+          <span>Espace: Sélectionner</span>
+          <span>Échap: Fermer</span>
         </div>
       </div>
     </div>
