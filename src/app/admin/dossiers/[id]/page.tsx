@@ -15,31 +15,40 @@ export default async function DossierDetailPage({
   const supabase = await createClient()
 
   // Fetch dossier
-  const { data: dossier, error: dossierError } = await supabase
+  const { data: dossierData, error: dossierError } = await supabase
     .from('dossiers')
     .select('*')
     .eq('id', params.id)
     .single()
 
-  if (dossierError || !dossier) {
+  if (dossierError || !dossierData) {
     notFound()
   }
 
+  // Serialize dossier to remove any non-serializable data
+  const dossier = JSON.parse(JSON.stringify(dossierData))
+
   // Fetch photos
-  const { data: photos } = await supabase
+  const { data: photosData } = await supabase
     .from('photos')
     .select('*')
     .eq('dossier_id', params.id)
     .order('display_order', { ascending: true })
 
+  // Serialize photos
+  const photos = photosData ? JSON.parse(JSON.stringify(photosData)) : []
+
   // Fetch selections
-  const { data: selections } = await supabase
+  const { data: selectionsData } = await supabase
     .from('selections')
     .select('*, photos(*)')
     .eq('dossier_id', params.id)
 
-  const photoCount = photos?.length || 0
-  const selectionCount = selections?.length || 0
+  // Serialize selections
+  const selections = selectionsData ? JSON.parse(JSON.stringify(selectionsData)) : []
+
+  const photoCount = photos.length
+  const selectionCount = selections.length
   const minAllowed = dossier.photo_limit - dossier.photo_limit_tolerance
   const maxAllowed = dossier.photo_limit + dossier.photo_limit_tolerance
 
@@ -286,7 +295,7 @@ export default async function DossierDetailPage({
               Upload More Photos
             </Link>
           </div>
-          <PhotoGallery photos={photos || []} dossierId={params.id} />
+          <PhotoGallery photos={photos} dossierId={params.id} />
         </div>
       )}
 
@@ -294,7 +303,7 @@ export default async function DossierDetailPage({
       {selectionCount > 0 && (
         <div className="mt-8">
           <SelectionViewer
-            selections={selections || []}
+            selections={selections}
             dossier={dossier}
           />
         </div>
