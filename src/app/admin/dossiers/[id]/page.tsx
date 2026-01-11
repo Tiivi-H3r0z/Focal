@@ -221,8 +221,8 @@ export default async function DossierDetailPage({
           <div className="flex items-center space-x-2">
             <code className="flex-1 bg-white px-3 py-2 rounded text-sm text-blue-800 border border-blue-300">
               {galleryUrl}
+            </code>
             <CopyButton text={galleryUrl} />
-            </button>
           </div>
         </div>
 
