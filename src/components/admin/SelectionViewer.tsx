@@ -12,15 +12,23 @@ interface SelectionViewerProps {
   dossier: Dossier
 }
 
+// Helper function to remove file extension from filename
+function removeExtension(filename: string): string {
+  const lastDotIndex = filename.lastIndexOf('.')
+  if (lastDotIndex === -1) return filename
+  return filename.substring(0, lastDotIndex)
+}
+
 export default function SelectionViewer({
   selections,
   dossier,
 }: SelectionViewerProps) {
   const [copied, setCopied] = useState(false)
+  const [copiedBottom, setCopiedBottom] = useState(false)
 
-  // Generate comma-separated list of filenames
+  // Generate comma-separated list of filenames without extensions
   const commaList = selections
-    .map((s) => s.photos.original_filename)
+    .map((s) => removeExtension(s.photos.original_filename))
     .sort()
     .join(', ')
 
@@ -28,6 +36,12 @@ export default function SelectionViewer({
     await navigator.clipboard.writeText(commaList)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleCopyBottom = async () => {
+    await navigator.clipboard.writeText(commaList)
+    setCopiedBottom(true)
+    setTimeout(() => setCopiedBottom(false), 2000)
   }
 
   const minAllowed = dossier.photo_limit - dossier.photo_limit_tolerance
@@ -65,7 +79,7 @@ export default function SelectionViewer({
         </div>
       )}
 
-      {/* Lightroom Export */}
+      {/* Lightroom Export - Top */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Comma-Separated List for Adobe Lightroom
@@ -109,6 +123,27 @@ export default function SelectionViewer({
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Lightroom Export - Bottom Copy */}
+      <div className="mt-6 pt-6 border-t border-gray-200">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Comma-Separated List for Adobe Lightroom
+        </label>
+        <div className="flex items-start space-x-2">
+          <textarea
+            readOnly
+            value={commaList}
+            rows={3}
+            className="flex-1 font-mono text-sm bg-gray-50 border border-gray-300 rounded-md p-3"
+          />
+          <button
+            onClick={handleCopyBottom}
+            className="px-4 py-2 bg-brand-600 text-white rounded-md hover:bg-brand-700 text-sm font-medium"
+          >
+            {copiedBottom ? 'Copied!' : 'Copy'}
+          </button>
         </div>
       </div>
     </div>
