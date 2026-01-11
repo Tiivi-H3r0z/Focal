@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import Link from 'next/link'
 import { getStatusColor, getStatusLabel, formatDate } from '@/lib/utils'
 import DossierActions from '@/components/admin/DossierActions'
@@ -52,7 +53,11 @@ export default async function DossierDetailPage({
   const minAllowed = dossier.photo_limit - dossier.photo_limit_tolerance
   const maxAllowed = dossier.photo_limit + dossier.photo_limit_tolerance
 
-  const galleryUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/gallery/${dossier.secret_url}`
+  // Get the host from request headers for dynamic URL generation
+  const headersList = await headers()
+  const host = headersList.get('host') || 'localhost:3000'
+  const protocol = headersList.get('x-forwarded-proto') || 'http'
+  const galleryUrl = `${protocol}://${host}/gallery/${dossier.secret_url}`
 
   return (
     <div className="px-4 sm:px-0">
