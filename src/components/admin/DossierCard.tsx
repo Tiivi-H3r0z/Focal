@@ -22,13 +22,32 @@ export default function DossierCard({ dossier }: DossierCardProps) {
           <h3 className="text-lg font-semibold text-gray-900">
             {dossier.client_name}
           </h3>
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-              dossier.status
-            )}`}
-          >
-            {getStatusLabel(dossier.status)}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                dossier.status
+              )}`}
+            >
+              {getStatusLabel(dossier.status)}
+            </span>
+            {dossier.archived && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                <svg
+                  className="mr-1 h-3 w-3"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" />
+                  <path
+                    fillRule="evenodd"
+                    d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                Archived
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2 text-sm text-gray-600">
