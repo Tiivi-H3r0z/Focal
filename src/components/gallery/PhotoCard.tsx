@@ -11,7 +11,6 @@ interface PhotoCardProps {
   onUpdateComment: (photo: Photo, comment: string) => void
   onPhotoClick: () => void
   isLocked: boolean
-  aspectRatio?: 'portrait' | 'landscape' | 'square'
 }
 
 export default function PhotoCard({
@@ -21,7 +20,6 @@ export default function PhotoCard({
   onUpdateComment,
   onPhotoClick,
   isLocked,
-  aspectRatio = 'square',
 }: PhotoCardProps) {
   const supabase = createClient()
   const isSelected = !!selection
@@ -42,23 +40,20 @@ export default function PhotoCard({
 
   return (
     <div
-      className={`group relative overflow-hidden bg-stone-200 transition-all duration-500 cursor-pointer
-        ${aspectRatio === 'portrait' ? 'sm:row-span-2' : ''}
-        ${aspectRatio === 'landscape' ? 'sm:col-span-2' : ''}
-        ${isSelected ? 'ring-4 ring-stone-900 ring-inset' : 'hover:shadow-2xl'}
-        aspect-[4/3] sm:aspect-auto
+      className={`masonry-item group relative overflow-hidden bg-stone-100 transition-all duration-500 cursor-pointer rounded-sm
+        ${isSelected ? 'ring-4 ring-stone-900 ring-inset shadow-inner' : 'hover:shadow-xl'}
       `}
       onClick={handleToggle}
     >
       <img
         src={getPhotoUrl()}
         alt={photo.original_filename}
-        className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${isSelected ? 'opacity-80' : ''}`}
+        className={`w-full block h-auto transition-transform duration-700 group-hover:scale-[1.02] ${isSelected ? 'opacity-90' : ''}`}
         loading="lazy"
       />
 
       {/* Overlay controls - desktop */}
-      <div className="absolute inset-0 bg-black/20 opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
+      <div className="absolute inset-0 bg-black/10 opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
         <div className="flex justify-between items-start">
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors
@@ -69,7 +64,7 @@ export default function PhotoCard({
           </div>
           <div className="flex gap-2">
             {hasComment && (
-              <div className="p-2 bg-stone-900/50 rounded-full text-white backdrop-blur-sm">
+              <div className="p-2 bg-stone-900/60 rounded-full text-white backdrop-blur-sm">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
               </div>
             )}
@@ -84,27 +79,27 @@ export default function PhotoCard({
             </button>
           </div>
         </div>
-        <div className="text-white text-xs font-medium tracking-wider drop-shadow-md">
+        <div className="text-white text-xs font-medium tracking-wider drop-shadow-md bg-black/20 p-1 rounded inline-block self-start">
           {photo.original_filename}
         </div>
       </div>
 
       {/* Persistent visible overlay on mobile */}
       <div className="sm:hidden absolute top-2 right-2 flex gap-2 items-center">
-         {hasComment && (
-            <div className="p-2 bg-stone-900/40 rounded-full text-white backdrop-blur-md">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-            </div>
-          )}
-         <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onPhotoClick()
-            }}
-            className="p-3 bg-black/40 rounded-full text-white backdrop-blur-md"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          </button>
+        {hasComment && (
+          <div className="p-2 bg-stone-900/40 rounded-full text-white backdrop-blur-md">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          </div>
+        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onPhotoClick()
+          }}
+          className="p-3 bg-black/40 rounded-full text-white backdrop-blur-md"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </button>
       </div>
 
       {/* Persistent selected indicator */}

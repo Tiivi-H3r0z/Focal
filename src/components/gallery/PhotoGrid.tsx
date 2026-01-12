@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import type { Photo, Selection } from '@/lib/types/database.types'
 import PhotoCard from './PhotoCard'
 import PhotoLightbox from './PhotoLightbox'
@@ -13,13 +13,6 @@ interface PhotoGridProps {
   isLocked: boolean
 }
 
-// Generate a deterministic aspect ratio based on photo index for visual variety
-function getAspectRatio(index: number): 'portrait' | 'landscape' | 'square' {
-  if (index % 7 === 0) return 'portrait'
-  if (index % 5 === 0) return 'landscape'
-  return 'square'
-}
-
 export default function PhotoGrid({
   photos,
   selections,
@@ -28,11 +21,6 @@ export default function PhotoGrid({
   isLocked,
 }: PhotoGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-
-  // Memoize aspect ratios to prevent recalculation
-  const photoAspectRatios = useMemo(() => {
-    return photos.map((_, index) => getAspectRatio(index))
-  }, [photos])
 
   return (
     <>
@@ -46,7 +34,6 @@ export default function PhotoGrid({
             onUpdateComment={onUpdateComment}
             onPhotoClick={() => setLightboxIndex(index)}
             isLocked={isLocked}
-            aspectRatio={photoAspectRatios[index]}
           />
         ))}
       </div>
