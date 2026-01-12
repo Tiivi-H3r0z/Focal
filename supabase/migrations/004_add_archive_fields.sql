@@ -20,6 +20,8 @@ SELECT
   d.status,
   d.photo_limit,
   d.photo_limit_tolerance,
+  d.created_at,
+  d.contacted_client,
   d.archived,
   d.archived_at,
   COUNT(DISTINCT p.id) AS total_photos,
