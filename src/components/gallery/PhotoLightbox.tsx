@@ -29,6 +29,7 @@ export default function PhotoLightbox({
   const [showCommentInput, setShowCommentInput] = useState(false)
   const [commentText, setCommentText] = useState('')
   const [isHoveringImage, setIsHoveringImage] = useState(false)
+  const [animationClass, setAnimationClass] = useState('')
 
   // Touch handling refs
   const touchStart = useRef<number | null>(null)
@@ -62,6 +63,23 @@ export default function PhotoLightbox({
     }
   }, [index, photos.length])
 
+  // Animated navigation functions
+  const triggerNext = useCallback(() => {
+    setAnimationClass('slide-out-left')
+    setTimeout(() => {
+      handleNext()
+      setAnimationClass('slide-in-right')
+    }, 150)
+  }, [handleNext])
+
+  const triggerPrev = useCallback(() => {
+    setAnimationClass('slide-out-right')
+    setTimeout(() => {
+      handlePrevious()
+      setAnimationClass('slide-in-left')
+    }, 150)
+  }, [handlePrevious])
+
   const handleToggleSelection = useCallback(() => {
     if (isLocked) return
     onToggleSelection(currentPhoto)
@@ -84,9 +102,9 @@ export default function PhotoLightbox({
     const isRightSwipe = distance < -minSwipeDistance
 
     if (isLeftSwipe) {
-      handleNext()
+      triggerNext()
     } else if (isRightSwipe) {
-      handlePrevious()
+      triggerPrev()
     }
   }
 
@@ -96,10 +114,10 @@ export default function PhotoLightbox({
 
     switch (e.key) {
       case 'ArrowRight':
-        handleNext()
+        triggerNext()
         break
       case 'ArrowLeft':
-        handlePrevious()
+        triggerPrev()
         break
       case ' ':
         e.preventDefault()
@@ -109,7 +127,7 @@ export default function PhotoLightbox({
         onClose()
         break
     }
-  }, [showCommentInput, handleNext, handlePrevious, handleToggleSelection, onClose])
+  }, [showCommentInput, triggerNext, triggerPrev, handleToggleSelection, onClose])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -132,11 +150,27 @@ export default function PhotoLightbox({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-stone-950 animate-fade-in touch-none"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-stone-950 animate-fade-in touch-none overflow-hidden"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
+      {/* Slide animation styles */}
+      <style>{`
+        .slide-out-left { transform: translateX(-30px); opacity: 0; transition: all 0.15s ease-in; }
+        .slide-out-right { transform: translateX(30px); opacity: 0; transition: all 0.15s ease-in; }
+        .slide-in-right { animation: slideInRight 0.3s ease-out; }
+        .slide-in-left { animation: slideInLeft 0.3s ease-out; }
+        @keyframes slideInRight {
+          from { transform: translateX(40px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideInLeft {
+          from { transform: translateX(-40px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
+
       {/* Top Bar */}
       <div className="absolute top-0 w-full p-4 sm:p-6 flex justify-between items-center z-30 pointer-events-none">
         <div className="hidden sm:block bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 pointer-events-auto">
@@ -159,7 +193,7 @@ export default function PhotoLightbox({
       <div className="relative w-full h-full flex items-center justify-center overflow-hidden pt-12 pb-32">
         {/* Large hover navigation areas - desktop */}
         <button
-          onClick={handlePrevious}
+          onClick={triggerPrev}
           className="hidden sm:flex absolute inset-y-0 left-0 w-1/4 z-20 group items-center justify-start pl-8"
         >
           <div className="w-16 h-16 flex items-center justify-center rounded-full bg-white/0 group-hover:bg-white/10 border border-transparent group-hover:border-white/20 text-white/0 group-hover:text-white transition-all duration-300">
@@ -168,7 +202,7 @@ export default function PhotoLightbox({
         </button>
 
         <button
-          onClick={handleNext}
+          onClick={triggerNext}
           className="hidden sm:flex absolute inset-y-0 right-0 w-1/4 z-20 group items-center justify-end pr-8"
         >
           <div className="w-16 h-16 flex items-center justify-center rounded-full bg-white/0 group-hover:bg-white/10 border border-transparent group-hover:border-white/20 text-white/0 group-hover:text-white transition-all duration-300">
@@ -178,7 +212,7 @@ export default function PhotoLightbox({
 
         {/* Main Image */}
         <div
-          className="relative max-w-[95vw] sm:max-w-[85vw] max-h-[60vh] sm:max-h-[75vh] transition-transform duration-500 z-10"
+          className={`relative max-w-[95vw] sm:max-w-[85vw] max-h-[60vh] sm:max-h-[75vh] z-10 ${animationClass}`}
           onMouseEnter={() => setIsHoveringImage(true)}
           onMouseLeave={() => setIsHoveringImage(false)}
         >
@@ -186,7 +220,7 @@ export default function PhotoLightbox({
             key={currentPhoto.id}
             src={getPhotoUrl(currentPhoto)}
             alt={currentPhoto.original_filename}
-            className={`w-full h-full object-contain shadow-[0_0_100px_rgba(0,0,0,0.8)] transition-all duration-500 pointer-events-none select-none ${isHoveringImage ? 'scale-[1.01]' : 'scale-100'}`}
+            className={`w-full h-full object-contain shadow-[0_0_100px_rgba(0,0,0,0.8)] transition-transform duration-500 pointer-events-none select-none ${isHoveringImage ? 'scale-[1.01]' : 'scale-100'}`}
           />
         </div>
       </div>
@@ -213,7 +247,7 @@ export default function PhotoLightbox({
         <div className="flex items-center gap-2 sm:gap-4 bg-stone-900/60 backdrop-blur-3xl p-2 sm:p-3 rounded-full border border-white/10 shadow-2xl w-full max-w-md sm:max-w-none justify-between sm:justify-center">
           {/* Previous Button */}
           <button
-            onClick={handlePrevious}
+            onClick={triggerPrev}
             className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full bg-white/5 text-white hover:bg-white/20 transition-all border border-white/5 active:scale-90"
           >
             <Icons.ChevronLeft />
@@ -262,7 +296,7 @@ export default function PhotoLightbox({
 
           {/* Next Button */}
           <button
-            onClick={handleNext}
+            onClick={triggerNext}
             className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full bg-white/5 text-white hover:bg-white/20 transition-all border border-white/5 active:scale-90"
           >
             <Icons.ChevronRight />
