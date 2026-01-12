@@ -3,7 +3,7 @@ import { getStatusColor, getStatusLabel, formatDate } from '@/lib/utils'
 import type { DossierStats } from '@/lib/types/database.types'
 
 interface DossierCardProps {
-  dossier: DossierStats & { created_at: string; contacted_client: boolean }
+  dossier: DossierStats
 }
 
 export default function DossierCard({ dossier }: DossierCardProps) {
