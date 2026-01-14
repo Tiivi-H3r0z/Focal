@@ -240,6 +240,16 @@ export default async function DossierDetailPage({
           </div>
         </div>
 
+        {/* Selection Viewer */}
+        {selectionCount > 0 && (
+          <div className="mb-6">
+            <SelectionViewer
+              selections={selections}
+              dossier={dossier}
+            />
+          </div>
+        )}
+
         {/* Actions */}
         <DossierActions dossier={dossier} />
       </div>
@@ -301,16 +311,6 @@ export default async function DossierDetailPage({
             </Link>
           </div>
           <PhotoGallery photos={photos} dossierId={params.id} />
-        </div>
-      )}
-
-      {/* Selection Viewer */}
-      {selectionCount > 0 && (
-        <div className="mt-8">
-          <SelectionViewer
-            selections={selections}
-            dossier={dossier}
-          />
         </div>
       )}
     </div>
