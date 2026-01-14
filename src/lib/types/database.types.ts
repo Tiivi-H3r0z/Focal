@@ -16,6 +16,8 @@ export interface Dossier {
   updated_at: string
   submitted_at: string | null
   locked_at: string | null
+  archived: boolean
+  archived_at: string | null
 }
 
 export interface Photo {
@@ -43,6 +45,10 @@ export interface DossierStats {
   status: DossierStatus
   photo_limit: number
   photo_limit_tolerance: number
+  created_at: string
+  contacted_client: boolean
+  archived: boolean
+  archived_at: string | null
   total_photos: number
   selected_photos: number
   max_allowed: number

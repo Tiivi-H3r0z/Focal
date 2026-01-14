@@ -35,8 +35,32 @@ module.exports = {
         }
       },
       fontFamily: {
-        serif: ['Georgia', 'Cambria', 'Times New Roman', 'serif'],
+        serif: ['Playfair Display', 'Georgia', 'Cambria', 'Times New Roman', 'serif'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      animation: {
+        'fade-in': 'fade-in 0.3s ease-out forwards',
+        'slide-up': 'slide-up 0.4s ease-out forwards',
+        'zoom-in': 'zoom-in 0.2s ease-out forwards',
+        'slide-in-from-bottom': 'slide-in-from-bottom 0.4s ease-out forwards',
+      },
+      keyframes: {
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'slide-up': {
+          from: { opacity: '0', transform: 'translate(-50%, 20px)' },
+          to: { opacity: '1', transform: 'translate(-50%, 0)' },
+        },
+        'zoom-in': {
+          from: { opacity: '0', transform: 'scale(0.5)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+        'slide-in-from-bottom': {
+          from: { opacity: '0', transform: 'translateY(100%)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
       },
     },
   },

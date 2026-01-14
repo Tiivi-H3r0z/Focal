@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Photo, Selection } from '@/lib/types/database.types'
 import { createClient } from '@/lib/supabase/client'
+import { Icons } from './Icons'
 
 interface PhotoLightboxProps {
   photos: Photo[]
@@ -27,56 +28,117 @@ export default function PhotoLightbox({
   const [index, setIndex] = useState(currentIndex)
   const [showCommentInput, setShowCommentInput] = useState(false)
   const [commentText, setCommentText] = useState('')
+  const [isHoveringImage, setIsHoveringImage] = useState(false)
+  const [animationClass, setAnimationClass] = useState('')
+
+  // Touch handling refs
+  const touchStart = useRef<number | null>(null)
+  const touchEnd = useRef<number | null>(null)
+  const minSwipeDistance = 50
 
   const currentPhoto = photos[index]
   const currentSelection = selections.get(currentPhoto.id)
   const isSelected = !!currentSelection
+  const comment = currentSelection?.comment || ''
 
   useEffect(() => {
     setCommentText(currentSelection?.comment || '')
   }, [currentSelection])
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowLeft') handlePrevious()
-      if (e.key === 'ArrowRight') handleNext()
-      if (e.key === ' ') {
-        e.preventDefault()
-        handleToggleSelection()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [index, isSelected])
-
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (index < photos.length - 1) {
       setIndex(index + 1)
       setShowCommentInput(false)
+    } else {
+      setIndex(0) // Loop to start
     }
-  }
+  }, [index, photos.length])
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (index > 0) {
       setIndex(index - 1)
       setShowCommentInput(false)
+    } else {
+      setIndex(photos.length - 1) // Loop to end
     }
-  }
+  }, [index, photos.length])
 
-  const handleToggleSelection = () => {
+  // Animated navigation functions
+  const triggerNext = useCallback(() => {
+    setAnimationClass('slide-out-left')
+    setTimeout(() => {
+      handleNext()
+      setAnimationClass('slide-in-right')
+    }, 150)
+  }, [handleNext])
+
+  const triggerPrev = useCallback(() => {
+    setAnimationClass('slide-out-right')
+    setTimeout(() => {
+      handlePrevious()
+      setAnimationClass('slide-in-left')
+    }, 150)
+  }, [handlePrevious])
+
+  const handleToggleSelection = useCallback(() => {
     if (isLocked) return
     onToggleSelection(currentPhoto)
+  }, [isLocked, onToggleSelection, currentPhoto])
+
+  // Touch handlers
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchEnd.current = null
+    touchStart.current = e.targetTouches[0].clientX
   }
 
-  const handleSaveComment = () => {
-    if (isSelected) {
-      onUpdateComment(currentPhoto, commentText)
-    } else {
-      onToggleSelection(currentPhoto, commentText)
+  const onTouchMove = (e: React.TouchEvent) => {
+    touchEnd.current = e.targetTouches[0].clientX
+  }
+
+  const onTouchEnd = () => {
+    if (!touchStart.current || !touchEnd.current) return
+    const distance = touchStart.current - touchEnd.current
+    const isLeftSwipe = distance > minSwipeDistance
+    const isRightSwipe = distance < -minSwipeDistance
+
+    if (isLeftSwipe) {
+      triggerNext()
+    } else if (isRightSwipe) {
+      triggerPrev()
     }
-    setShowCommentInput(false)
+  }
+
+  // Keyboard handler
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (showCommentInput) return
+
+    switch (e.key) {
+      case 'ArrowRight':
+        triggerNext()
+        break
+      case 'ArrowLeft':
+        triggerPrev()
+        break
+      case ' ':
+        e.preventDefault()
+        handleToggleSelection()
+        break
+      case 'Escape':
+        onClose()
+        break
+    }
+  }, [showCommentInput, triggerNext, triggerPrev, handleToggleSelection, onClose])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  const handleUpdateComment = (newComment: string) => {
+    if (isSelected) {
+      onUpdateComment(currentPhoto, newComment)
+    }
+    setCommentText(newComment)
   }
 
   const getPhotoUrl = (photo: Photo) => {
@@ -87,157 +149,157 @@ export default function PhotoLightbox({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-95 z-50 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-black bg-opacity-50">
-        <div className="flex items-center space-x-4">
-          <h3 className="text-white text-lg font-medium">
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-stone-950 animate-fade-in touch-none overflow-hidden"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* Slide animation styles */}
+      <style>{`
+        .slide-out-left { transform: translateX(-30px); opacity: 0; transition: all 0.15s ease-in; }
+        .slide-out-right { transform: translateX(30px); opacity: 0; transition: all 0.15s ease-in; }
+        .slide-in-right { animation: slideInRight 0.3s ease-out; }
+        .slide-in-left { animation: slideInLeft 0.3s ease-out; }
+        @keyframes slideInRight {
+          from { transform: translateX(40px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideInLeft {
+          from { transform: translateX(-40px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
+
+      {/* Top Bar: Minimal and floating */}
+      <div className="absolute top-0 w-full p-4 sm:p-6 flex justify-between items-center z-30 pointer-events-none">
+        <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/5 pointer-events-auto shadow-sm">
+          <span className="font-mono text-[9px] sm:text-[10px] tracking-[0.15em] text-white/60 uppercase">
             {currentPhoto.original_filename}
-          </h3>
-          {currentSelection?.comment && (
-            <span className="text-brand-400 text-sm flex items-center">
-              <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-              </svg>
-              Has comment
-            </span>
-          )}
-        </div>
-        <div className="flex items-center space-x-2">
-          <span className="text-gray-400 text-sm">
-            {index + 1} / {photos.length}
           </span>
-          <button
-            onClick={onClose}
-            className="text-white hover:text-gray-300 p-2"
-          >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="group flex items-center gap-2 bg-white/10 hover:bg-white text-white hover:text-stone-900 transition-all px-3 py-2 sm:px-4 rounded-full border border-white/10 backdrop-blur-md pointer-events-auto shadow-xl ml-auto"
+        >
+          <span className="text-[9px] sm:text-xs font-semibold tracking-widest uppercase">Fermer</span>
+          <div className="w-px h-3 bg-current opacity-20"></div>
+          <Icons.Close />
+        </button>
+      </div>
+
+      {/* Main Image Area: Full bleed, respect aspect ratio */}
+      <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+        {/* Desktop Nav Arrows */}
+        <button
+          onClick={triggerPrev}
+          className="hidden sm:flex absolute inset-y-0 left-0 w-1/6 z-20 group items-center justify-start pl-8"
+        >
+          <div className="w-12 h-12 flex items-center justify-center rounded-full bg-white/0 group-hover:bg-white/10 text-white/0 group-hover:text-white transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </div>
+        </button>
+
+        <button
+          onClick={triggerNext}
+          className="hidden sm:flex absolute inset-y-0 right-0 w-1/6 z-20 group items-center justify-end pr-8"
+        >
+          <div className="w-12 h-12 flex items-center justify-center rounded-full bg-white/0 group-hover:bg-white/10 text-white/0 group-hover:text-white transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </div>
+        </button>
+
+        {/* Main Image */}
+        <div
+          className={`relative max-w-full max-h-full flex items-center justify-center transition-transform duration-500 z-10 p-4 pb-24 sm:pb-32 ${animationClass}`}
+          onMouseEnter={() => setIsHoveringImage(true)}
+          onMouseLeave={() => setIsHoveringImage(false)}
+        >
+          <img
+            key={currentPhoto.id}
+            src={getPhotoUrl(currentPhoto)}
+            alt={currentPhoto.original_filename}
+            className={`w-auto h-auto max-w-full max-h-full object-contain shadow-2xl transition-transform duration-500 pointer-events-none select-none ${isHoveringImage ? 'scale-[1.01]' : 'scale-100'}`}
+          />
         </div>
       </div>
 
-      {/* Main Image Area */}
-      <div className="flex-1 flex items-center justify-center relative">
-        {/* Previous Button */}
-        {index > 0 && (
+      {/* Interaction Bar: Bottom Docked & Discreet */}
+      <div className="absolute bottom-4 sm:bottom-6 z-30 flex flex-col items-center gap-2 w-full px-4">
+        {/* Comment Drawer: Semi-transparent overlay */}
+        <div className={`transition-all duration-300 w-full max-w-lg overflow-hidden ${showCommentInput || comment ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className="bg-stone-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-3 mb-2">
+            <input
+              type="text"
+              autoFocus={showCommentInput}
+              placeholder="Note pour le photographe..."
+              value={commentText}
+              onChange={(e) => handleUpdateComment(e.target.value)}
+              onFocus={() => setShowCommentInput(true)}
+              onBlur={() => setShowCommentInput(false)}
+              disabled={isLocked || !isSelected}
+              className="w-full bg-transparent border-none text-white text-sm outline-none placeholder:text-white/40 disabled:cursor-not-allowed"
+            />
+          </div>
+        </div>
+
+        {/* The Control Bar - Docked Aesthetic */}
+        <div className="flex items-center gap-1 bg-stone-900/50 backdrop-blur-2xl p-1.5 rounded-full border border-white/5 shadow-2xl w-fit">
+          {/* Previous Button */}
           <button
-            onClick={handlePrevious}
-            className="absolute left-4 z-10 bg-black bg-opacity-50 hover:bg-opacity-75 text-white rounded-full p-3 transition-all"
+            onClick={triggerPrev}
+            className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all active:scale-90"
           >
-            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           </button>
-        )}
 
-        {/* Image */}
-        <img
-          src={getPhotoUrl(currentPhoto)}
-          alt={currentPhoto.original_filename}
-          className="max-w-full max-h-full object-contain"
-        />
+          {/* Selection Toggle Button */}
+          {!isLocked && (
+            <button
+              onClick={handleToggleSelection}
+              className={`flex items-center justify-center gap-3 px-6 sm:px-10 h-10 sm:h-12 rounded-full font-semibold text-xs sm:text-sm transition-all transform active:scale-95 border
+                ${isSelected
+                  ? 'bg-white text-stone-900 border-white'
+                  : 'bg-stone-800/80 text-white/90 border-white/10 hover:border-white/30'
+                }
+              `}
+            >
+              <div className={`w-2.5 h-2.5 rounded-full border-2 ${isSelected ? 'bg-stone-900 border-stone-900' : 'border-white/40'}`} />
+              <span className="tracking-[0.1em] uppercase whitespace-nowrap">
+                {isSelected ? 'Photo choisie' : 'Choisir cette photo'}
+              </span>
+            </button>
+          )}
 
-        {/* Next Button */}
-        {index < photos.length - 1 && (
-          <button
-            onClick={handleNext}
-            className="absolute right-4 z-10 bg-black bg-opacity-50 hover:bg-opacity-75 text-white rounded-full p-3 transition-all"
-          >
-            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        )}
-      </div>
-
-      {/* Bottom Controls */}
-      <div className="bg-black bg-opacity-50 p-4">
-        <div className="max-w-4xl mx-auto">
-          {!showCommentInput ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                {/* Selection Toggle */}
-                {!isLocked && (
-                  <button
-                    onClick={handleToggleSelection}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                      isSelected
-                        ? 'bg-brand-600 text-white hover:bg-brand-700'
-                        : 'bg-gray-700 text-white hover:bg-gray-600'
-                    }`}
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      {isSelected ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      )}
-                    </svg>
-                    <span>{isSelected ? 'Remove from Basket' : 'Add to Basket'}</span>
-                  </button>
-                )}
-
-                {/* Comment Button */}
-                {!isLocked && (
-                  <button
-                    onClick={() => setShowCommentInput(true)}
-                    className="flex items-center space-x-2 px-4 py-2 rounded-lg font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                    </svg>
-                    <span>{currentSelection?.comment ? 'Edit Comment' : 'Add Comment'}</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Current Comment Display */}
-              {currentSelection?.comment && (
-                <div className="max-w-md">
-                  <p className="text-gray-300 text-sm italic">
-                    "{currentSelection.comment}"
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Add your comment (e.g., 'black & white please', 'crop tighter', etc.)"
-                rows={3}
-                autoFocus
-                className="w-full px-4 py-3 bg-gray-800 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-gray-400"
-              />
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setShowCommentInput(false)
-                    setCommentText(currentSelection?.comment || '')
-                  }}
-                  className="px-4 py-2 rounded-lg font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveComment}
-                  className="px-4 py-2 rounded-lg font-medium bg-brand-600 text-white hover:bg-brand-700 transition-colors"
-                >
-                  Save Comment
-                </button>
-              </div>
+          {/* Locked indicator */}
+          {isLocked && (
+            <div className="flex items-center justify-center gap-3 px-6 sm:px-10 h-10 sm:h-12 rounded-full font-semibold text-xs sm:text-sm bg-stone-800/80 text-white/50 border border-white/10">
+              <Icons.Lock />
+              <span className="tracking-[0.1em] uppercase whitespace-nowrap">
+                Verrouillé
+              </span>
             </div>
           )}
 
-          {/* Keyboard Shortcuts Hint */}
-          <div className="mt-3 text-center text-gray-500 text-xs">
-            <span className="mr-4">← → Navigate</span>
-            <span className="mr-4">Space: Toggle selection</span>
-            <span>Esc: Close</span>
-          </div>
+          {/* Comment Toggle Button */}
+          {!isLocked && isSelected && (
+            <button
+              onClick={() => setShowCommentInput(!showCommentInput)}
+              className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full transition-all active:scale-90 ${comment ? 'text-white bg-white/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+              title="Ajouter un commentaire"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </button>
+          )}
+
+          {/* Next Button */}
+          <button
+            onClick={triggerNext}
+            className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all active:scale-90"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
         </div>
       </div>
     </div>
