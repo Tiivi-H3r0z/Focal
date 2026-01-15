@@ -72,7 +72,7 @@ export default async function DossierDetailPage({
               ← Back to Dashboard
             </Link>
             <h1 className="text-3xl font-bold text-gray-900">
-              {dossier.client_name}
+              {dossier.client_name}LALA
             </h1>
           </div>
           <span
