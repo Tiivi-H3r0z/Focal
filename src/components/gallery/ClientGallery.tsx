@@ -1,12 +1,17 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import type { Dossier, Photo, Selection } from '@/lib/types/database.types'
 import PhotoGrid from './PhotoGrid'
 import GalleryNavigation from './GalleryNavigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Icons } from './Icons'
+
+interface LocalSelection {
+  photo_id: string
+  comment: string | null
+}
 
 interface ClientGalleryProps {
   dossier: Dossier
@@ -21,96 +26,173 @@ export default function ClientGallery({
 }: ClientGalleryProps) {
   const router = useRouter()
   const supabase = createClient()
-  const [selections, setSelections] = useState<Map<string, Selection>>(
-    new Map(initialSelections.map((s) => [s.photo_id, s]))
+
+  // Local selection state - not persisted until validation
+  const [localSelections, setLocalSelections] = useState<Map<string, LocalSelection>>(
+    new Map(initialSelections.map((s) => [s.photo_id, { photo_id: s.photo_id, comment: s.comment }]))
   )
+
+  // Track initial state to compare for changes
+  const [initialState] = useState<Map<string, LocalSelection>>(
+    new Map(initialSelections.map((s) => [s.photo_id, { photo_id: s.photo_id, comment: s.comment }]))
+  )
+
   const [submitting, setSubmitting] = useState(false)
   const [showOnlySelected, setShowOnlySelected] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [showLimitReached, setShowLimitReached] = useState(false)
 
   const isLocked = dossier.status === 'locked'
+  const isAtLimit = localSelections.size >= dossier.photo_limit
+
+  // Check if there are unsaved changes
+  const hasChanges = useMemo(() => {
+    if (localSelections.size !== initialState.size) return true
+    for (const [photoId, selection] of localSelections) {
+      const initial = initialState.get(photoId)
+      if (!initial) return true
+      if (selection.comment !== initial.comment) return true
+    }
+    return false
+  }, [localSelections, initialState])
 
   const filteredPhotos = useMemo(() => {
     if (showOnlySelected) {
-      return photos.filter((photo) => selections.has(photo.id))
+      return photos.filter((photo) => localSelections.has(photo.id))
     }
     return photos
-  }, [photos, showOnlySelected, selections])
+  }, [photos, showOnlySelected, localSelections])
 
-  const handleToggleSelection = async (
+  // Convert local selections to Selection format for PhotoGrid
+  const selectionsForGrid = useMemo(() => {
+    const map = new Map<string, Selection>()
+    for (const [photoId, local] of localSelections) {
+      map.set(photoId, {
+        id: photoId, // temporary ID
+        dossier_id: dossier.id,
+        photo_id: photoId,
+        comment: local.comment,
+        selected_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+    }
+    return map
+  }, [localSelections, dossier.id])
+
+  const handleToggleSelection = useCallback((
     photo: Photo,
     comment: string | null = null
   ) => {
     if (isLocked) return
 
-    const newSelections = new Map(selections)
+    // Prevent unfavoriting when in favorites view
+    if (showOnlySelected && localSelections.has(photo.id)) {
+      return
+    }
 
-    if (newSelections.has(photo.id)) {
-      // Remove selection
-      const selection = newSelections.get(photo.id)!
-      await supabase.from('selections').delete().eq('id', selection.id)
-      newSelections.delete(photo.id)
-    } else {
-      // Add selection
-      const { data, error } = await supabase
-        .from('selections')
-        .insert({
-          dossier_id: dossier.id,
-          photo_id: photo.id,
-          comment,
-        })
-        .select()
-        .single()
+    setLocalSelections(prev => {
+      const newSelections = new Map(prev)
 
-      if (!error && data) {
-        newSelections.set(photo.id, data)
+      if (newSelections.has(photo.id)) {
+        // Remove selection
+        newSelections.delete(photo.id)
+      } else {
+        // Check if at limit before adding
+        if (newSelections.size >= dossier.photo_limit) {
+          setShowLimitReached(true)
+          setTimeout(() => setShowLimitReached(false), 3000)
+          return prev // Don't add, at limit
+        }
+        // Add selection
+        newSelections.set(photo.id, { photo_id: photo.id, comment })
       }
-    }
 
-    setSelections(newSelections)
-  }
+      return newSelections
+    })
+  }, [isLocked, showOnlySelected, localSelections, dossier.photo_limit])
 
-  const handleUpdateComment = async (photo: Photo, comment: string) => {
-    const selection = selections.get(photo.id)
-    if (!selection) return
+  const handleUpdateComment = useCallback((photo: Photo, comment: string) => {
+    setLocalSelections(prev => {
+      const existing = prev.get(photo.id)
+      if (!existing) return prev
 
-    const { error } = await supabase
-      .from('selections')
-      .update({ comment })
-      .eq('id', selection.id)
-
-    if (!error) {
-      const newSelections = new Map(selections)
-      newSelections.set(photo.id, { ...selection, comment })
-      setSelections(newSelections)
-    }
-  }
+      const newSelections = new Map(prev)
+      newSelections.set(photo.id, { ...existing, comment })
+      return newSelections
+    })
+  }, [])
 
   const handleSubmit = async () => {
     if (isLocked) return
 
-    if (
-      !confirm(
-        `Envoyer votre sélection de ${selections.size} photos ? Vous pourrez encore modifier votre sélection par la suite si nécessaire.`
-      )
-    ) {
-      return
-    }
-
     setSubmitting(true)
 
-    const { error } = await supabase
-      .from('dossiers')
-      .update({
-        status: 'submitted',
-        submitted_at: new Date().toISOString(),
-      })
-      .eq('id', dossier.id)
+    try {
+      // First, delete all existing selections for this dossier
+      await supabase
+        .from('selections')
+        .delete()
+        .eq('dossier_id', dossier.id)
 
-    if (!error) {
+      // Then insert all current selections
+      if (localSelections.size > 0) {
+        const selectionsToInsert = Array.from(localSelections.values()).map(s => ({
+          dossier_id: dossier.id,
+          photo_id: s.photo_id,
+          comment: s.comment,
+        }))
+
+        const { error: insertError } = await supabase
+          .from('selections')
+          .insert(selectionsToInsert)
+
+        if (insertError) {
+          console.error('Error inserting selections:', insertError)
+          alert('Erreur lors de l\'enregistrement de la sélection')
+          setSubmitting(false)
+          return
+        }
+      }
+
+      // Update dossier status
+      const { error: updateError } = await supabase
+        .from('dossiers')
+        .update({
+          status: 'submitted',
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('id', dossier.id)
+
+      if (updateError) {
+        console.error('Error updating dossier:', updateError)
+      }
+
+      // Send notification email if configured
+      if (dossier.notification_email) {
+        try {
+          await fetch('/api/send-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              dossierId: dossier.id,
+              clientName: dossier.client_name,
+              selectionCount: localSelections.size,
+              notificationEmail: dossier.notification_email,
+            }),
+          })
+        } catch (e) {
+          console.error('Error sending notification:', e)
+        }
+      }
+
       setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 5000)
-      router.refresh()
+      setTimeout(() => {
+        setShowSuccess(false)
+        router.refresh()
+      }, 4000)
+    } catch (error) {
+      console.error('Error submitting selections:', error)
+      alert('Erreur lors de l\'envoi de la sélection')
     }
 
     setSubmitting(false)
@@ -119,16 +201,23 @@ export default function ClientGallery({
   return (
     <div className="min-h-screen bg-[#fafafa] pb-32">
       <GalleryNavigation
-        selectedCount={selections.size}
+        selectedCount={localSelections.size}
         targetCount={dossier.photo_limit}
-        tolerance={dossier.photo_limit_tolerance}
         clientName={dossier.client_name}
         onSend={handleSubmit}
         showOnlySelected={showOnlySelected}
         onToggleFilter={() => setShowOnlySelected(!showOnlySelected)}
         isLocked={isLocked}
         submitting={submitting}
+        isAtLimit={isAtLimit}
       />
+
+      {/* Limit reached notification */}
+      {showLimitReached && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-orange-500 text-white px-6 py-3 rounded-full shadow-lg animate-bounce-in">
+          <span className="font-semibold">Limite atteinte ! Maximum {dossier.photo_limit} photos</span>
+        </div>
+      )}
 
       {/* Status Messages */}
       {isLocked && (
@@ -171,25 +260,38 @@ export default function ClientGallery({
         </div>
       )}
 
+      {/* Warning when viewing only selected - can't unfavorite */}
+      {showOnlySelected && !isLocked && (
+        <div className="max-w-screen-2xl mx-auto px-6 lg:px-12 mt-6">
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <p className="text-sm text-amber-800 text-center">
+              Mode favoris : appuyez sur une photo pour l'agrandir. Revenez à la vue complète pour modifier votre sélection.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Photo Grid */}
       <main className="max-w-screen-2xl mx-auto px-6 py-12 lg:px-12">
         {filteredPhotos.length > 0 ? (
           <PhotoGrid
             photos={filteredPhotos}
-            selections={selections}
+            selections={selectionsForGrid}
             onToggleSelection={handleToggleSelection}
             onUpdateComment={handleUpdateComment}
             isLocked={isLocked}
+            showOnlySelected={showOnlySelected}
+            isAtLimit={isAtLimit}
           />
         ) : (
           <div className="flex flex-col items-center justify-center py-32 text-stone-400">
             <Icons.HeartOutline />
             <p className="text-xl font-serif italic mt-4">
-              {showOnlySelected && selections.size === 0
+              {showOnlySelected && localSelections.size === 0
                 ? "Vous n'avez pas encore de photos sélectionnées."
                 : "Aucune photo disponible."}
             </p>
-            {showOnlySelected && selections.size === 0 && (
+            {showOnlySelected && localSelections.size === 0 && (
               <button
                 onClick={() => setShowOnlySelected(false)}
                 className="mt-4 text-stone-900 font-bold underline underline-offset-4 hover:text-stone-700 transition-colors"
@@ -219,13 +321,52 @@ export default function ClientGallery({
         </div>
       )}
 
-      {/* Success Toast */}
+      {/* Success Overlay - Animated */}
       {showSuccess && (
-        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[60] bg-stone-900 text-white px-8 py-4 rounded-full shadow-2xl flex items-center gap-4 animate-slide-up">
-          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-stone-900">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gradient-to-br from-green-400 via-green-500 to-emerald-600 animate-fade-in">
+          <div className="flex flex-col items-center text-white text-center px-6">
+            {/* Animated checkmark */}
+            <div className="relative w-32 h-32 mb-8">
+              <div className="absolute inset-0 bg-white/20 rounded-full animate-ping"></div>
+              <div className="absolute inset-0 bg-white/30 rounded-full animate-pulse"></div>
+              <div className="relative w-full h-full bg-white rounded-full flex items-center justify-center shadow-2xl">
+                <svg
+                  className="w-16 h-16 text-green-500 animate-success-check"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" className="animate-draw-check"></polyline>
+                </svg>
+              </div>
+            </div>
+
+            <h2 className="text-4xl md:text-5xl font-serif font-bold mb-4 animate-slide-up">
+              Merci !
+            </h2>
+            <p className="text-xl md:text-2xl opacity-90 max-w-md animate-slide-up-delay">
+              Votre sélection de {localSelections.size} photos a été envoyée au photographe avec succès.
+            </p>
+
+            {/* Decorative particles */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              {[...Array(20)].map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute w-2 h-2 bg-white/30 rounded-full animate-float"
+                  style={{
+                    left: `${Math.random() * 100}%`,
+                    top: `${Math.random() * 100}%`,
+                    animationDelay: `${Math.random() * 2}s`,
+                    animationDuration: `${3 + Math.random() * 2}s`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
-          <span className="font-semibold tracking-wide uppercase text-sm">Sélection envoyée avec succès !</span>
         </div>
       )}
     </div>

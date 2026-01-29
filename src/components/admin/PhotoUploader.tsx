@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import JSZip from 'jszip'
@@ -13,7 +13,17 @@ interface UploadProgress {
   total: number
   uploaded: number
   currentFile: string
+  currentBatch: number
+  totalBatches: number
+  errors: string[]
 }
+
+// Batch size for uploads - balance between speed and memory
+const BATCH_SIZE = 50
+
+// Retry configuration
+const MAX_RETRIES = 3
+const RETRY_DELAY_BASE = 1000 // 1 second base delay
 
 // Sanitize filenames to remove accents and special characters
 function sanitizeFilename(filename: string): string {
@@ -31,51 +41,74 @@ function sanitizeFilename(filename: string): string {
   return sanitized + ext
 }
 
+// Sleep function for retry delays
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
 export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
   const router = useRouter()
   const supabase = createClient()
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<UploadProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const cancelledRef = useRef(false)
 
-  const uploadFile = async (file: File, index: number, total: number) => {
+  const uploadFileWithRetry = async (
+    file: File,
+    index: number,
+    total: number,
+    retries = 0
+  ): Promise<boolean> => {
+    if (cancelledRef.current) return false
+
     const originalFilename = file.name
     const sanitizedFilename = sanitizeFilename(originalFilename)
     const storagePath = `${dossierId}/${sanitizedFilename}`
 
-    setProgress({
-      total,
-      uploaded: index,
-      currentFile: originalFilename,
-    })
+    try {
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('photos')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        })
 
-    // Upload to storage
-    const { error: uploadError } = await supabase.storage
-      .from('photos')
-      .upload(storagePath, file, {
-        cacheControl: '3600',
-        upsert: false,
+      if (uploadError) {
+        // If file already exists, skip it
+        if (uploadError.message.includes('already exists') || uploadError.message.includes('Duplicate')) {
+          console.log(`Skipping duplicate: ${originalFilename}`)
+          return true
+        }
+        throw uploadError
+      }
+
+      // Insert to database
+      const { error: dbError } = await supabase.from('photos').insert({
+        dossier_id: dossierId,
+        original_filename: originalFilename,
+        storage_path: storagePath,
+        file_size: file.size,
+        display_order: index,
       })
 
-    if (uploadError) {
-      console.error(`Error uploading ${originalFilename}:`, uploadError)
-      throw new Error(`Failed to upload ${originalFilename}: ${uploadError.message}`)
-    }
+      if (dbError) {
+        // If DB insert fails, clean up storage
+        if (!dbError.message.includes('duplicate')) {
+          await supabase.storage.from('photos').remove([storagePath])
+          throw dbError
+        }
+      }
 
-    // Insert to database
-    const { error: dbError } = await supabase.from('photos').insert({
-      dossier_id: dossierId,
-      original_filename: originalFilename,
-      storage_path: storagePath,
-      file_size: file.size,
-      display_order: index,
-    })
-
-    if (dbError) {
-      console.error(`Error saving ${originalFilename} to database:`, dbError)
-      // Try to delete from storage if DB insert fails
-      await supabase.storage.from('photos').remove([storagePath])
-      throw new Error(`Failed to save ${originalFilename} to database`)
+      return true
+    } catch (err: any) {
+      if (retries < MAX_RETRIES) {
+        // Exponential backoff
+        const delay = RETRY_DELAY_BASE * Math.pow(2, retries)
+        console.log(`Retry ${retries + 1}/${MAX_RETRIES} for ${originalFilename} after ${delay}ms`)
+        await sleep(delay)
+        return uploadFileWithRetry(file, index, total, retries + 1)
+      }
+      throw new Error(`Failed to upload ${originalFilename} after ${MAX_RETRIES} retries: ${err.message}`)
     }
   }
 
@@ -84,24 +117,99 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
 
     setError(null)
     setUploading(true)
-    setProgress({ total: files.length, uploaded: 0, currentFile: '' })
+    cancelledRef.current = false
+
+    const totalBatches = Math.ceil(files.length / BATCH_SIZE)
+    const errors: string[] = []
+
+    setProgress({
+      total: files.length,
+      uploaded: 0,
+      currentFile: '',
+      currentBatch: 0,
+      totalBatches,
+      errors: [],
+    })
 
     try {
-      for (let i = 0; i < files.length; i++) {
-        await uploadFile(files[i], i, files.length)
+      let uploadedCount = 0
+
+      // Process files in batches
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        if (cancelledRef.current) break
+
+        const start = batchIndex * BATCH_SIZE
+        const end = Math.min(start + BATCH_SIZE, files.length)
+        const batch = files.slice(start, end)
+
+        setProgress(prev => ({
+          ...prev!,
+          currentBatch: batchIndex + 1,
+          currentFile: `Batch ${batchIndex + 1}/${totalBatches}`,
+        }))
+
+        // Process batch files concurrently (but not all at once)
+        const CONCURRENT_UPLOADS = 5
+        for (let i = 0; i < batch.length; i += CONCURRENT_UPLOADS) {
+          if (cancelledRef.current) break
+
+          const chunk = batch.slice(i, i + CONCURRENT_UPLOADS)
+          const uploadPromises = chunk.map((file, chunkIndex) => {
+            const globalIndex = start + i + chunkIndex
+            return uploadFileWithRetry(file, globalIndex, files.length)
+              .then(() => {
+                uploadedCount++
+                setProgress(prev => ({
+                  ...prev!,
+                  uploaded: uploadedCount,
+                  currentFile: file.name,
+                }))
+                return { success: true, file: file.name }
+              })
+              .catch((err) => {
+                errors.push(`${file.name}: ${err.message}`)
+                return { success: false, file: file.name, error: err.message }
+              })
+          })
+
+          await Promise.all(uploadPromises)
+        }
+
+        // Small delay between batches to prevent overwhelming the server
+        if (batchIndex < totalBatches - 1) {
+          await sleep(100)
+        }
       }
 
-      setProgress({ total: files.length, uploaded: files.length, currentFile: 'Done!' })
+      setProgress(prev => ({
+        ...prev!,
+        uploaded: uploadedCount,
+        currentFile: 'Terminé !',
+        errors,
+      }))
 
-      // Redirect after a short delay
+      // Show final status and redirect
       setTimeout(() => {
-        router.push(`/admin/dossiers/${dossierId}`)
-        router.refresh()
-      }, 1000)
+        if (errors.length > 0) {
+          setError(`${errors.length} fichier(s) n'ont pas pu être téléversés. ${uploadedCount} fichier(s) téléversés avec succès.`)
+          setUploading(false)
+        } else {
+          router.push(`/admin/dossiers/${dossierId}`)
+          router.refresh()
+        }
+      }, 1500)
     } catch (err: any) {
-      setError(err.message || 'Upload failed')
+      setError(err.message || 'Échec du téléversement')
       setUploading(false)
     }
+  }
+
+  const handleCancel = () => {
+    cancelledRef.current = true
+    setUploading(false)
+    setProgress(null)
+    router.push(`/admin/dossiers/${dossierId}`)
+    router.refresh()
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,23 +225,55 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
     setUploading(true)
 
     try {
+      setProgress({
+        total: 0,
+        uploaded: 0,
+        currentFile: 'Extraction du ZIP...',
+        currentBatch: 0,
+        totalBatches: 0,
+        errors: [],
+      })
+
       const zip = new JSZip()
       const contents = await zip.loadAsync(file)
       const files: File[] = []
 
-      for (const [filename, zipEntry] of Object.entries(contents.files)) {
-        if (!zipEntry.dir && !filename.startsWith('__MACOSX')) {
+      // Extract files from ZIP in batches to manage memory
+      const entries = Object.entries(contents.files).filter(
+        ([filename, entry]) => !entry.dir && !filename.startsWith('__MACOSX') && !filename.includes('._')
+      )
+
+      setProgress(prev => ({
+        ...prev!,
+        total: entries.length,
+        currentFile: `Extraction de ${entries.length} fichiers...`,
+      }))
+
+      // Extract in batches of 100 to manage memory
+      const EXTRACT_BATCH = 100
+      for (let i = 0; i < entries.length; i += EXTRACT_BATCH) {
+        const batch = entries.slice(i, i + EXTRACT_BATCH)
+        const extractPromises = batch.map(async ([filename, zipEntry]) => {
           const blob = await zipEntry.async('blob')
-          const file = new File([blob], filename.split('/').pop() || filename, {
-            type: 'image/jpeg',
+          const extractedFilename = filename.split('/').pop() || filename
+          return new File([blob], extractedFilename, {
+            type: blob.type || 'image/jpeg',
           })
-          files.push(file)
-        }
+        })
+
+        const extractedFiles = await Promise.all(extractPromises)
+        files.push(...extractedFiles)
+
+        setProgress(prev => ({
+          ...prev!,
+          currentFile: `Extrait ${files.length}/${entries.length} fichiers...`,
+        }))
       }
 
+      // Now upload the extracted files
       await handleFiles(files)
     } catch (err: any) {
-      setError(err.message || 'Failed to extract ZIP file')
+      setError(err.message || 'Échec de l\'extraction du fichier ZIP')
       setUploading(false)
     }
   }
@@ -148,6 +288,8 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
     e.preventDefault()
   }, [])
 
+  const progressPercent = progress ? (progress.uploaded / progress.total) * 100 : 0
+
   return (
     <div className="bg-white shadow rounded-lg p-6">
       {error && (
@@ -160,24 +302,41 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
         <div className="text-center py-12">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mb-4"></div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Uploading Photos...
+            Téléversement en cours...
           </h3>
           {progress && (
             <div className="max-w-md mx-auto">
               <p className="text-sm text-gray-600 mb-2">
-                {progress.uploaded} of {progress.total} uploaded
+                {progress.uploaded} / {progress.total} fichiers téléversés
               </p>
-              <p className="text-xs text-gray-500 mb-4">
-                Current: {progress.currentFile}
+              {progress.totalBatches > 1 && (
+                <p className="text-xs text-gray-500 mb-2">
+                  Lot {progress.currentBatch} / {progress.totalBatches}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mb-4 truncate max-w-full">
+                {progress.currentFile}
               </p>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
                 <div
-                  className="bg-brand-600 h-2 rounded-full transition-all"
-                  style={{
-                    width: `${(progress.uploaded / progress.total) * 100}%`,
-                  }}
+                  className="bg-brand-600 h-3 rounded-full transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
                 ></div>
               </div>
+              <p className="text-xs text-gray-400 mb-4">
+                {Math.round(progressPercent)}% terminé
+              </p>
+              {progress.errors.length > 0 && (
+                <p className="text-xs text-orange-600 mb-4">
+                  {progress.errors.length} erreur(s) rencontrée(s)
+                </p>
+              )}
+              <button
+                onClick={handleCancel}
+                className="text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                Annuler et voir les photos téléversées
+              </button>
             </div>
           )}
         </div>
@@ -204,12 +363,12 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
             </svg>
             <p className="mt-4 text-sm text-gray-600">
               <label htmlFor="file-upload" className="cursor-pointer text-brand-600 hover:text-brand-700 font-medium">
-                Click to select files
+                Cliquez pour sélectionner
               </label>{' '}
-              or drag and drop
+              ou glissez-déposez
             </p>
             <p className="mt-1 text-xs text-gray-500">
-              JPEG, PNG images (supports multiple files)
+              JPEG, PNG (supporte jusqu'à 3000+ photos)
             </p>
             <input
               id="file-upload"
@@ -225,7 +384,7 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
           <div className="mt-6">
             <div className="flex items-center justify-center">
               <div className="flex-1 border-t border-gray-300"></div>
-              <span className="px-4 text-sm text-gray-500">OR</span>
+              <span className="px-4 text-sm text-gray-500">OU</span>
               <div className="flex-1 border-t border-gray-300"></div>
             </div>
 
@@ -247,7 +406,7 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
                     d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                   />
                 </svg>
-                Upload ZIP File
+                Téléverser un fichier ZIP
               </label>
               <input
                 id="zip-upload"
@@ -257,7 +416,7 @@ export default function PhotoUploader({ dossierId }: PhotoUploaderProps) {
                 className="hidden"
               />
               <p className="mt-2 text-xs text-gray-500">
-                Upload a ZIP file containing your photos
+                Téléversez un fichier ZIP contenant vos photos (recommandé pour 1000+ photos)
               </p>
             </div>
           </div>

@@ -5,7 +5,6 @@ import { Icons } from './Icons'
 interface GalleryNavigationProps {
   selectedCount: number
   targetCount: number
-  tolerance: number
   clientName: string
   photographerName?: string
   onSend: () => void
@@ -13,12 +12,12 @@ interface GalleryNavigationProps {
   onToggleFilter: () => void
   isLocked: boolean
   submitting: boolean
+  isAtLimit: boolean
 }
 
 export default function GalleryNavigation({
   selectedCount,
   targetCount,
-  tolerance,
   clientName,
   photographerName = "Les Augustins Photographie",
   onSend,
@@ -26,9 +25,10 @@ export default function GalleryNavigation({
   onToggleFilter,
   isLocked,
   submitting,
+  isAtLimit,
 }: GalleryNavigationProps) {
   const progress = Math.min((selectedCount / targetCount) * 100, 100)
-  const isComplete = selectedCount >= targetCount
+  const isComplete = selectedCount === targetCount
 
   return (
     <div className="w-full">
@@ -67,8 +67,8 @@ export default function GalleryNavigation({
               <div className="flex items-baseline gap-2 mb-2">
                 <span className="text-white text-xl font-bold">{selectedCount}</span>
                 <span className="text-white/40 text-xs uppercase tracking-widest font-semibold">/ {targetCount}</span>
-                {tolerance > 0 && (
-                  <span className="text-white/30 text-xs">(±{tolerance})</span>
+                {isAtLimit && (
+                  <span className="text-green-400 text-xs ml-1">✓</span>
                 )}
               </div>
               <div className="w-full max-w-[180px] h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -94,10 +94,10 @@ export default function GalleryNavigation({
                   <Icons.Send />
                 )}
                 <span className="tracking-[0.05em] text-xs sm:text-sm uppercase whitespace-nowrap hidden sm:inline">
-                  {submitting ? 'Envoi...' : 'Envoyer au photographe'}
+                  {submitting ? 'Envoi...' : 'Valider ma sélection'}
                 </span>
                 <span className="tracking-[0.05em] text-xs uppercase whitespace-nowrap sm:hidden">
-                  {submitting ? '...' : 'Envoyer'}
+                  {submitting ? '...' : 'Valider'}
                 </span>
               </button>
             )}
