@@ -11,6 +11,8 @@ interface PhotoCardProps {
   onUpdateComment: (photo: Photo, comment: string) => void
   onPhotoClick: () => void
   isLocked: boolean
+  showOnlySelected?: boolean
+  isAtLimit?: boolean
 }
 
 export default function PhotoCard({
@@ -20,10 +22,15 @@ export default function PhotoCard({
   onUpdateComment,
   onPhotoClick,
   isLocked,
+  showOnlySelected = false,
+  isAtLimit = false,
 }: PhotoCardProps) {
   const supabase = createClient()
   const isSelected = !!selection
   const hasComment = !!selection?.comment
+
+  // Can't toggle if locked, or if in favorites view and already selected, or at limit and not selected
+  const canToggle = !isLocked && !(showOnlySelected && isSelected) && !(isAtLimit && !isSelected)
 
   const getPhotoUrl = () => {
     const { data } = supabase.storage
@@ -34,8 +41,13 @@ export default function PhotoCard({
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (isLocked) return
+    if (!canToggle) return
     onToggleSelection(photo)
+  }
+
+  const handlePhotoClick = () => {
+    // Tap on photo always opens lightbox
+    onPhotoClick()
   }
 
   return (
@@ -43,7 +55,7 @@ export default function PhotoCard({
       className={`masonry-item group relative overflow-hidden bg-stone-100 transition-all duration-500 cursor-pointer rounded-sm
         ${isSelected ? 'ring-4 ring-stone-900 ring-inset shadow-inner' : 'hover:shadow-xl'}
       `}
-      onClick={handleToggle}
+      onClick={handlePhotoClick}
     >
       <img
         src={getPhotoUrl()}
@@ -55,6 +67,7 @@ export default function PhotoCard({
       {/* Overlay controls - desktop */}
       <div className="absolute inset-0 bg-black/10 opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
         <div className="flex justify-between items-start">
+          {/* Selection indicator on desktop hover */}
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors
               ${isSelected ? 'bg-stone-900 border-stone-900' : 'bg-white/20 border-white'}
@@ -68,14 +81,20 @@ export default function PhotoCard({
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
               </div>
             )}
+            {/* Heart button for selection on desktop */}
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onPhotoClick()
-              }}
-              className="p-3 sm:p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-sm transition-colors"
+              onClick={handleToggle}
+              disabled={!canToggle}
+              className={`p-3 sm:p-2 rounded-full backdrop-blur-sm transition-all
+                ${isSelected
+                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
+                  : canToggle
+                    ? 'bg-white/20 hover:bg-white/40 text-white'
+                    : 'bg-white/10 text-white/40 cursor-not-allowed'
+                }
+              `}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <Icons.Heart />
             </button>
           </div>
         </div>
@@ -84,25 +103,31 @@ export default function PhotoCard({
         </div>
       </div>
 
-      {/* Persistent visible overlay on mobile */}
+      {/* Persistent visible overlay on mobile - Heart button for selection */}
       <div className="sm:hidden absolute top-2 right-2 flex gap-2 items-center">
         {hasComment && (
           <div className="p-2 bg-stone-900/40 rounded-full text-white backdrop-blur-md">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           </div>
         )}
+        {/* Heart button for selection on mobile */}
         <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onPhotoClick()
-          }}
-          className="p-3 bg-black/40 rounded-full text-white backdrop-blur-md"
+          onClick={handleToggle}
+          disabled={!canToggle}
+          className={`p-3 rounded-full backdrop-blur-md transition-all
+            ${isSelected
+              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
+              : canToggle
+                ? 'bg-black/40 text-white active:bg-white/60'
+                : 'bg-black/20 text-white/40'
+            }
+          `}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <Icons.Heart />
         </button>
       </div>
 
-      {/* Persistent selected indicator */}
+      {/* Persistent selected indicator - top left */}
       {isSelected && (
         <div className="absolute top-2 left-2 w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center text-white ring-2 ring-white shadow-lg animate-zoom-in">
           <Icons.Heart />
@@ -112,6 +137,11 @@ export default function PhotoCard({
       {/* Locked indicator */}
       {isLocked && (
         <div className="absolute inset-0 bg-black/10 cursor-not-allowed" />
+      )}
+
+      {/* At limit indicator for non-selected photos */}
+      {isAtLimit && !isSelected && !isLocked && (
+        <div className="absolute inset-0 bg-black/5 cursor-default" />
       )}
     </div>
   )

@@ -52,37 +52,34 @@ export default function SelectionViewer({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const minAllowed = dossier.photo_limit - dossier.photo_limit_tolerance
-  const maxAllowed = dossier.photo_limit + dossier.photo_limit_tolerance
-  const isWithinRange =
-    selections.length >= minAllowed && selections.length <= maxAllowed
+  const isAtLimit = selections.length === dossier.photo_limit
+  const isOverLimit = selections.length > dossier.photo_limit
 
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">
-          Client Selection
+          Sélection du client
         </h2>
         <div className="flex items-center space-x-3">
           <span
             className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-              isWithinRange
+              isAtLimit
                 ? 'bg-green-100 text-green-800'
-                : 'bg-orange-100 text-orange-800'
+                : isOverLimit
+                ? 'bg-orange-100 text-orange-800'
+                : 'bg-gray-100 text-gray-800'
             }`}
           >
-            {selections.length} / {dossier.photo_limit} (±
-            {dossier.photo_limit_tolerance})
+            {selections.length} / {dossier.photo_limit}
           </span>
         </div>
       </div>
 
-      {!isWithinRange && (
+      {isOverLimit && (
         <div className="mb-4 bg-orange-50 border border-orange-200 rounded-md p-4">
           <p className="text-sm text-orange-800">
-            {selections.length < minAllowed
-              ? `Client selected ${selections.length} photos, but the minimum is ${minAllowed}.`
-              : `Client selected ${selections.length} photos, exceeding the maximum of ${maxAllowed}.`}
+            Le client a sélectionné {selections.length} photos, ce qui dépasse la limite de {dossier.photo_limit}.
           </p>
         </div>
       )}
@@ -90,7 +87,7 @@ export default function SelectionViewer({
       {/* Lightroom Export - Top */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Comma-Separated List for Adobe Lightroom
+          Liste séparée par virgules pour Adobe Lightroom
         </label>
         <div className="flex items-start space-x-2">
           <textarea
@@ -103,7 +100,7 @@ export default function SelectionViewer({
             onClick={handleCopy}
             className="px-4 py-2 bg-brand-600 text-white rounded-md hover:bg-brand-700 text-sm font-medium"
           >
-            {copied ? 'Copied!' : 'Copy'}
+            {copied ? 'Copié !' : 'Copier'}
           </button>
         </div>
       </div>
@@ -112,7 +109,7 @@ export default function SelectionViewer({
       {selectionsWithComments.length > 0 && (
         <div>
           <h3 className="text-sm font-medium text-gray-700 mb-3">
-            Photos with Comments
+            Photos avec commentaires
           </h3>
           <div className="space-y-6">
             {selectionsWithComments.map((selection) => (

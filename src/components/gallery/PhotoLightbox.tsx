@@ -13,6 +13,8 @@ interface PhotoLightboxProps {
   onToggleSelection: (photo: Photo, comment?: string | null) => void
   onUpdateComment: (photo: Photo, comment: string) => void
   isLocked: boolean
+  showOnlySelected?: boolean
+  isAtLimit?: boolean
 }
 
 export default function PhotoLightbox({
@@ -23,6 +25,8 @@ export default function PhotoLightbox({
   onToggleSelection,
   onUpdateComment,
   isLocked,
+  showOnlySelected = false,
+  isAtLimit = false,
 }: PhotoLightboxProps) {
   const supabase = createClient()
   const [index, setIndex] = useState(currentIndex)
@@ -40,6 +44,9 @@ export default function PhotoLightbox({
   const currentSelection = selections.get(currentPhoto.id)
   const isSelected = !!currentSelection
   const comment = currentSelection?.comment || ''
+
+  // Can't toggle if locked, or if in favorites view and already selected, or at limit and not selected
+  const canToggle = !isLocked && !(showOnlySelected && isSelected) && !(isAtLimit && !isSelected)
 
   useEffect(() => {
     setCommentText(currentSelection?.comment || '')
@@ -81,9 +88,9 @@ export default function PhotoLightbox({
   }, [handlePrevious])
 
   const handleToggleSelection = useCallback(() => {
-    if (isLocked) return
+    if (!canToggle) return
     onToggleSelection(currentPhoto)
-  }, [isLocked, onToggleSelection, currentPhoto])
+  }, [canToggle, onToggleSelection, currentPhoto])
 
   // Touch handlers
   const onTouchStart = (e: React.TouchEvent) => {
@@ -258,16 +265,19 @@ export default function PhotoLightbox({
           {!isLocked && (
             <button
               onClick={handleToggleSelection}
+              disabled={!canToggle}
               className={`flex items-center justify-center gap-3 px-6 sm:px-10 h-10 sm:h-12 rounded-full font-semibold text-xs sm:text-sm transition-all transform active:scale-95 border
                 ${isSelected
                   ? 'bg-white text-stone-900 border-white'
-                  : 'bg-stone-800/80 text-white/90 border-white/10 hover:border-white/30'
+                  : canToggle
+                    ? 'bg-stone-800/80 text-white/90 border-white/10 hover:border-white/30'
+                    : 'bg-stone-800/50 text-white/40 border-white/5 cursor-not-allowed'
                 }
               `}
             >
-              <div className={`w-2.5 h-2.5 rounded-full border-2 ${isSelected ? 'bg-stone-900 border-stone-900' : 'border-white/40'}`} />
+              <div className={`w-2.5 h-2.5 rounded-full border-2 ${isSelected ? 'bg-stone-900 border-stone-900' : canToggle ? 'border-white/40' : 'border-white/20'}`} />
               <span className="tracking-[0.1em] uppercase whitespace-nowrap">
-                {isSelected ? 'Photo choisie' : 'Choisir cette photo'}
+                {isSelected ? 'Photo choisie' : isAtLimit ? 'Limite atteinte' : 'Choisir cette photo'}
               </span>
             </button>
           )}

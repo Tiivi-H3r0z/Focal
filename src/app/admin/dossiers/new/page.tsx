@@ -18,7 +18,7 @@ export default function NewDossierPage() {
     client_phone: '',
     client_address: '',
     photo_limit: 25,
-    photo_limit_tolerance: 5,
+    notification_email: '',
   })
 
   const handleSubmit = async (e: FormEvent) => {
@@ -44,9 +44,10 @@ export default function NewDossierPage() {
           client_phone: formData.client_phone || null,
           client_address: formData.client_address || null,
           photo_limit: formData.photo_limit,
-          photo_limit_tolerance: formData.photo_limit_tolerance,
+          notification_email: formData.notification_email || null,
           secret_url: generateSecretUrl(),
           status: 'draft',
+          visible: false,
         })
         .select()
         .single()
@@ -154,65 +155,58 @@ export default function NewDossierPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label
-                htmlFor="photo_limit"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Photo Limit *
-              </label>
-              <input
-                type="number"
-                id="photo_limit"
-                required
-                min="1"
-                value={formData.photo_limit}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    photo_limit: parseInt(e.target.value),
-                  })
-                }
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 border px-3 py-2"
-              />
-            </div>
+          <div>
+            <label
+              htmlFor="photo_limit"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Number of Photos to Select *
+            </label>
+            <input
+              type="number"
+              id="photo_limit"
+              required
+              min="1"
+              value={formData.photo_limit}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  photo_limit: parseInt(e.target.value),
+                })
+              }
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 border px-3 py-2"
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              The client will select exactly this number of photos.
+            </p>
+          </div>
 
-            <div>
-              <label
-                htmlFor="photo_limit_tolerance"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Tolerance (±) *
-              </label>
-              <input
-                type="number"
-                id="photo_limit_tolerance"
-                required
-                min="0"
-                value={formData.photo_limit_tolerance}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    photo_limit_tolerance: parseInt(e.target.value),
-                  })
-                }
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 border px-3 py-2"
-              />
-            </div>
+          <div>
+            <label
+              htmlFor="notification_email"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Notification Email
+            </label>
+            <input
+              type="email"
+              id="notification_email"
+              value={formData.notification_email}
+              onChange={(e) =>
+                setFormData({ ...formData, notification_email: e.target.value })
+              }
+              placeholder="email@example.com"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 border px-3 py-2"
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              Receive an email when the client submits their selection.
+            </p>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
             <p className="text-sm text-blue-800">
-              Client will be able to select between{' '}
-              <strong>
-                {formData.photo_limit - formData.photo_limit_tolerance}
-              </strong>{' '}
-              and{' '}
-              <strong>
-                {formData.photo_limit + formData.photo_limit_tolerance}
-              </strong>{' '}
-              photos.
+              The client will be asked to select exactly{' '}
+              <strong>{formData.photo_limit}</strong> photos from the gallery.
             </p>
           </div>
         </div>

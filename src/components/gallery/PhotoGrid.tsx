@@ -11,6 +11,8 @@ interface PhotoGridProps {
   onToggleSelection: (photo: Photo, comment?: string | null) => void
   onUpdateComment: (photo: Photo, comment: string) => void
   isLocked: boolean
+  showOnlySelected?: boolean
+  isAtLimit?: boolean
 }
 
 export default function PhotoGrid({
@@ -19,6 +21,8 @@ export default function PhotoGrid({
   onToggleSelection,
   onUpdateComment,
   isLocked,
+  showOnlySelected = false,
+  isAtLimit = false,
 }: PhotoGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
@@ -34,6 +38,8 @@ export default function PhotoGrid({
             onUpdateComment={onUpdateComment}
             onPhotoClick={() => setLightboxIndex(index)}
             isLocked={isLocked}
+            showOnlySelected={showOnlySelected}
+            isAtLimit={isAtLimit}
           />
         ))}
       </div>
@@ -47,6 +53,8 @@ export default function PhotoGrid({
           onToggleSelection={onToggleSelection}
           onUpdateComment={onUpdateComment}
           isLocked={isLocked}
+          showOnlySelected={showOnlySelected}
+          isAtLimit={isAtLimit}
         />
       )}
     </>

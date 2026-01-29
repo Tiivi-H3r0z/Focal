@@ -8,7 +8,6 @@ export interface Dossier {
   client_phone: string | null
   client_address: string | null
   photo_limit: number
-  photo_limit_tolerance: number
   secret_url: string
   status: DossierStatus
   contacted_client: boolean
@@ -18,6 +17,8 @@ export interface Dossier {
   locked_at: string | null
   archived: boolean
   archived_at: string | null
+  visible: boolean
+  notification_email: string | null
 }
 
 export interface Photo {
@@ -44,15 +45,14 @@ export interface DossierStats {
   client_name: string
   status: DossierStatus
   photo_limit: number
-  photo_limit_tolerance: number
   created_at: string
   contacted_client: boolean
   archived: boolean
   archived_at: string | null
+  visible: boolean
+  notification_email: string | null
   total_photos: number
   selected_photos: number
-  max_allowed: number
-  min_allowed: number
 }
 
 export interface PhotoWithSelection extends Photo {
