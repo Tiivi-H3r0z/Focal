@@ -52,15 +52,17 @@ export default function PhotoCard({
 
   return (
     <div
-      className={`masonry-item group relative overflow-hidden bg-stone-100 transition-all duration-500 cursor-pointer rounded-sm
-        ${isSelected ? 'ring-4 ring-stone-900 ring-inset shadow-inner' : 'hover:shadow-xl'}
+      className={`masonry-item group relative overflow-hidden bg-stone-900 transition-all duration-500 cursor-pointer rounded-sm
+        ${isSelected ? 'outline outline-2 outline-white' : 'hover:shadow-2xl hover:shadow-black/50'}
       `}
       onClick={handlePhotoClick}
     >
       <img
         src={getPhotoUrl()}
         alt={photo.original_filename}
-        className={`w-full block h-auto transition-transform duration-700 group-hover:scale-[1.02] ${isSelected ? 'opacity-90' : ''}`}
+        className={`w-full block h-auto transition-all duration-700 group-hover:scale-[1.02]
+          ${isAtLimit && !isSelected ? 'grayscale opacity-40 contrast-75' : ''}
+        `}
         loading="lazy"
       />
 
@@ -70,7 +72,7 @@ export default function PhotoCard({
           {/* Selection indicator on desktop hover */}
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors
-              ${isSelected ? 'bg-stone-900 border-stone-900' : 'bg-white/20 border-white'}
+              ${isSelected ? 'bg-white border-white text-stone-900' : 'bg-white/5 border-white/20'}
             `}
           >
             {isSelected && <Icons.Check />}
@@ -81,24 +83,26 @@ export default function PhotoCard({
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
               </div>
             )}
-            {/* Heart button for selection on desktop */}
-            <button
-              onClick={handleToggle}
-              disabled={!canToggle}
-              className={`p-3 sm:p-2 rounded-full backdrop-blur-sm transition-all
-                ${isSelected
-                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
-                  : canToggle
-                    ? 'bg-white/20 hover:bg-white/40 text-white'
-                    : 'bg-white/10 text-white/40 cursor-not-allowed'
-                }
-              `}
-            >
-              <Icons.Heart />
-            </button>
+            {/* Heart button for selection on desktop - Hide if limit reached and not selected */}
+            {(isSelected || !isAtLimit) && (
+              <button
+                onClick={handleToggle}
+                disabled={!canToggle}
+                className={`p-3 sm:p-2 rounded-full backdrop-blur-sm transition-all border-2
+                  ${isSelected
+                    ? 'bg-rose-500 border-rose-500 text-white shadow-lg shadow-rose-500/30'
+                    : canToggle
+                      ? 'bg-white/10 hover:bg-white/20 border-white text-white'
+                      : 'bg-white/5 border-white/20 text-white/40 cursor-not-allowed'
+                  }
+                `}
+              >
+                <Icons.Heart solid={isSelected} />
+              </button>
+            )}
           </div>
         </div>
-        <div className="text-white text-xs font-medium tracking-wider drop-shadow-md bg-black/20 p-1 rounded inline-block self-start">
+        <div className="text-white text-[10px] font-bold tracking-[0.2em] uppercase drop-shadow-md bg-black/40 px-2 py-1 rounded inline-block self-start">
           {photo.original_filename}
         </div>
       </div>
@@ -110,29 +114,26 @@ export default function PhotoCard({
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           </div>
         )}
-        {/* Heart button for selection on mobile */}
-        <button
-          onClick={handleToggle}
-          disabled={!canToggle}
-          className={`p-3 rounded-full backdrop-blur-md transition-all
-            ${isSelected
-              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
-              : canToggle
-                ? 'bg-black/40 text-white active:bg-white/60'
-                : 'bg-black/20 text-white/40'
-            }
-          `}
-        >
-          <Icons.Heart />
-        </button>
+        {/* Heart button for selection on mobile - Hide if limit reached and not selected */}
+        {(isSelected || !isAtLimit) && (
+          <button
+            onClick={handleToggle}
+            disabled={!canToggle}
+            className={`p-3 rounded-full backdrop-blur-md transition-all border-2
+              ${isSelected
+                ? 'bg-rose-500 border-rose-500 text-white shadow-lg shadow-rose-500/30'
+                : canToggle
+                  ? 'bg-black/40 border-white text-white active:bg-white/20'
+                  : 'bg-black/20 border-white/20 text-white/40'
+              }
+            `}
+          >
+            <Icons.Heart solid={isSelected} />
+          </button>
+        )}
       </div>
 
-      {/* Persistent selected indicator - top left */}
-      {isSelected && (
-        <div className="absolute top-2 left-2 w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center text-white ring-2 ring-white shadow-lg animate-zoom-in">
-          <Icons.Heart />
-        </div>
-      )}
+
 
       {/* Locked indicator */}
       {isLocked && (

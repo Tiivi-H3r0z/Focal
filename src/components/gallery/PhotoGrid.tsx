@@ -1,9 +1,7 @@
 'use client'
 
-import { useState } from 'react'
 import type { Photo, Selection } from '@/lib/types/database.types'
 import PhotoCard from './PhotoCard'
-import PhotoLightbox from './PhotoLightbox'
 
 interface PhotoGridProps {
   photos: Photo[]
@@ -13,6 +11,9 @@ interface PhotoGridProps {
   isLocked: boolean
   showOnlySelected?: boolean
   isAtLimit?: boolean
+  gridSize?: 'small' | 'medium' | 'large'
+  onPhotoClick: (index: number) => void
+  startIndex?: number
 }
 
 export default function PhotoGrid({
@@ -23,40 +24,25 @@ export default function PhotoGrid({
   isLocked,
   showOnlySelected = false,
   isAtLimit = false,
+  gridSize = 'medium',
+  onPhotoClick,
+  startIndex = 0,
 }: PhotoGridProps) {
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-
   return (
-    <>
-      <div className="masonry-grid">
-        {photos.map((photo, index) => (
-          <PhotoCard
-            key={photo.id}
-            photo={photo}
-            selection={selections.get(photo.id)}
-            onToggleSelection={onToggleSelection}
-            onUpdateComment={onUpdateComment}
-            onPhotoClick={() => setLightboxIndex(index)}
-            isLocked={isLocked}
-            showOnlySelected={showOnlySelected}
-            isAtLimit={isAtLimit}
-          />
-        ))}
-      </div>
-
-      {lightboxIndex !== null && (
-        <PhotoLightbox
-          photos={photos}
-          currentIndex={lightboxIndex}
-          selections={selections}
-          onClose={() => setLightboxIndex(null)}
+    <div className={`masonry-grid masonry-grid-${gridSize}`}>
+      {photos.map((photo, index) => (
+        <PhotoCard
+          key={photo.id}
+          photo={photo}
+          selection={selections.get(photo.id)}
           onToggleSelection={onToggleSelection}
           onUpdateComment={onUpdateComment}
+          onPhotoClick={() => onPhotoClick(startIndex + index)}
           isLocked={isLocked}
           showOnlySelected={showOnlySelected}
           isAtLimit={isAtLimit}
         />
-      )}
-    </>
+      ))}
+    </div>
   )
 }
